@@ -13,8 +13,14 @@ import markdown
 import numpy as np
 import orjson
 import pandas as pd
+from selector.methods.distance import MaxMin, MaxSum, OptiSim, DISE
+from selector.methods.partition import GridPartition, Medoid
+from selector.methods.similarity import NSimilarity
 
-# originally use jsonify from flask, but it doesn't support numpy array
+import matplotlib.pyplot as plt
+import numpy as np
+import orjson
+import pandas as pd
 from flask import Flask, Response, render_template, request, send_file
 from flask_status import FlaskStatus
 from procrustes import (
@@ -58,6 +64,20 @@ ALGORITHM_MAP = {
     "permutation_2sided": permutation_2sided,
     "softassign": softassign,
     "symmetric": symmetric,
+}
+
+# Map algorithm names to their functions
+SELECTION_ALGORITHM_MAP = {
+    # Distance-based methods
+    "maxmin": MaxMin,
+    "maxsum": MaxSum,
+    "optisim": OptiSim,
+    "dise": DISE,
+    # Partition-based methods
+    "gridpartition": GridPartition,
+    "medoid": Medoid,
+    # Similarity-based methods
+    "nsimilarity": NSimilarity,
 }
 
 
@@ -187,15 +207,22 @@ def get_default_params(algorithm):
         return create_json_response({"error": f"Error getting parameters: {str(e)}"}, 500)
 
 
+@app.route("/get_default_selection_params/<algorithm>")
+def get_default_selection_params(algorithm):
+    """API endpoint to get default parameters for a selection algorithm."""
+    if algorithm not in SELECTION_ALGORITHM_MAP:
+        return create_json_response({"error": f"Algorithm unsupported: {algorithm}"}, 400)
+
+    try:
+        func = SELECTION_ALGORITHM_MAP[algorithm]
+        return create_json_response(get_default_parameters(func))
+    except Exception as e:
+        return create_json_response({"error": f"Error getting parameters: {str(e)}"}, 500)
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
-
-
-@app.route("/get_default_params/<algorithm>")
-def default_params(algorithm):
-    # return jsonify(get_default_params(algorithm))
-    return create_json_response(get_default_params(algorithm))
 
 
 @app.route("/md/<filename>")
@@ -265,6 +292,48 @@ def process_procrustes(array1, array2, algorithm, parameters):
         response_data["warning"] = warning_message
 
     return response_data
+
+
+def process_selection(array, algorithm, parameters):
+    """
+    Process feature matrix using the specified selection algorithm.
+
+    Parameters
+    ----------
+    array : np.ndarray
+        Input feature matrix
+    algorithm : str
+        Name of the selection algorithm to use
+    parameters : dict
+        Parameters for the algorithm
+
+    Returns
+    -------
+    dict
+        Dictionary containing results and any warnings
+    """
+    warnings.filterwarnings('error')  # Convert warnings to exceptions
+    result = {"success": False, "error": None, "warnings": [], "indices": None}
+
+    try:
+        # Get the algorithm class
+        algorithm_class = SELECTION_ALGORITHM_MAP.get(algorithm)
+        if algorithm_class is None:
+            raise ValueError(f"Unknown algorithm: {algorithm}")
+
+        # Initialize and run the algorithm
+        selector = algorithm_class(**parameters)
+        indices = selector.select(array)
+
+        result["success"] = True
+        result["indices"] = indices.tolist()
+
+    except Warning as w:
+        result["warnings"].append(str(w))
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
 
 
 @celery.task(bind=True)
@@ -345,6 +414,79 @@ def upload_file():
         clean_upload_dir(upload_dir)
 
 
+@app.route("/upload_selection", methods=["POST"])
+def upload_selection_file():
+    """Handle file upload and process selection."""
+    if "file" not in request.files:
+        return create_json_response({"error": "No file provided"}, 400)
+
+    file = request.files["file"]
+    if file.filename == "":
+        return create_json_response({"error": "No file selected"}, 400)
+
+    if not allowed_file(file.filename):
+        return create_json_response({"error": "File type not allowed"}, 400)
+
+    # Get parameters
+    algorithm = request.form.get("algorithm")
+    if not algorithm:
+        return create_json_response({"error": "No algorithm specified"}, 400)
+
+    try:
+        parameters = orjson.loads(request.form.get("parameters", "{}"))
+    except Exception as e:
+        return create_json_response({"error": f"Invalid parameters: {str(e)}"}, 400)
+
+    # Create unique upload directory
+    upload_dir = get_unique_upload_dir()
+
+    try:
+        # Save and process file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(upload_dir, filename)
+        file.save(filepath)
+
+        # Load data
+        array = load_data(filepath)
+
+        # Process selection
+        result = process_selection(array, algorithm, parameters)
+
+        if result["success"]:
+            # Save indices for later download
+            indices_path = os.path.join(upload_dir, "indices.txt")
+            np.savetxt(indices_path, result["indices"], fmt="%d")
+
+            return create_json_response({
+                "success": True,
+                "warnings": result["warnings"],
+                "indices": result["indices"],
+                "upload_dir": upload_dir
+            })
+        else:
+            return create_json_response({
+                "success": False,
+                "error": result["error"],
+                "warnings": result["warnings"]
+            })
+
+    except Exception as e:
+        return create_json_response({"error": str(e)}, 500)
+    finally:
+        # Clean up
+        clean_upload_dir(upload_dir)
+
+
+@app.route("/download/<upload_dir>")
+def download(upload_dir):
+    """Download selected indices."""
+    try:
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], upload_dir, "indices.txt")
+        return send_file(filepath, as_attachment=True, download_name="selected_indices.txt")
+    except Exception as e:
+        return create_json_response({"error": str(e)}, 500)
+
+
 @app.route("/status/<task_id>")
 def task_status(task_id):
     task = process_matrices.AsyncResult(task_id)
@@ -365,32 +507,6 @@ def task_status(task_id):
             "status": str(task.info),
         }
     return create_json_response(response)
-
-
-@app.route("/download", methods=["POST"])
-def download():
-    try:
-        data = orjson.loads(request.form["data"])
-        format_type = request.form["format"]
-
-        # Create temporary file
-        temp_dir = tempfile.mkdtemp()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"procrustes_result_{timestamp}"
-
-        if format_type == "npz":
-            filepath = os.path.join(temp_dir, f"{filename}.npz")
-            np.savez(filepath, np.array(data))
-        elif format_type == "xlsx":
-            filepath = os.path.join(temp_dir, f"{filename}.xlsx")
-            pd.DataFrame(data).to_excel(filepath, index=False)
-        else:  # txt
-            filepath = os.path.join(temp_dir, f"{filename}.txt")
-            np.savetxt(filepath, np.array(data))
-
-        return send_file(filepath, as_attachment=True)
-    except Exception as e:
-        return create_json_response({"error": str(e)}, 500)
 
 
 @app.route("/status")
@@ -421,4 +537,4 @@ def server_status():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    app.run(debug=True, host="0.0.0.0", port=8008)
