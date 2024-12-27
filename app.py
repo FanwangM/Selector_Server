@@ -52,32 +52,16 @@ os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 ALLOWED_EXTENSIONS = {"txt", "npz", "xlsx", "xls"}
 
 # Map algorithm names to their functions
-ALGORITHM_MAP = {
-    "orthogonal": orthogonal,
-    "rotational": rotational,
-    "permutation": permutation,
-    # "generalized": generalized,
-    "generic": generic,
-    # "kopt_heuristic_single": kopt_heuristic_single,
-    # "kopt_heuristic_double": kopt_heuristic_double,
-    "orthogonal_2sided": orthogonal_2sided,
-    "permutation_2sided": permutation_2sided,
-    "softassign": softassign,
-    "symmetric": symmetric,
-}
-
-# Map algorithm names to their functions
 SELECTION_ALGORITHM_MAP = {
     # Distance-based methods
-    "maxmin": MaxMin,
-    "maxsum": MaxSum,
-    "optisim": OptiSim,
-    "dise": DISE,
+    "MaxMin": MaxMin,
+    "MaxSum": MaxSum,
+    "OptiSim": OptiSim,
+    "DISE": DISE,
     # Partition-based methods
-    "gridpartition": GridPartition,
-    "medoid": Medoid,
+    "GridPartition": GridPartition,
     # Similarity-based methods
-    "nsimilarity": NSimilarity,
+    "NSimilarity": NSimilarity,
 }
 
 
