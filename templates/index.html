@@ -462,6 +462,43 @@
                             </div>
 
                             <div class="mb-3">
+                                <label for="size" class="form-label">Subset Size</label>
+                                <input type="number" class="form-control" id="size" name="size" min="1" step="1" required>
+                                <small class="text-muted">Number of data points to select (integer)</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="distance_metric" class="form-label">Distance Function</label>
+                                <select class="form-select" id="distance_metric" name="distance_metric">
+                                    <option value="">None</option>
+                                    <option value="euclidean">euclidean</option>
+                                    <option value="cityblock">cityblock</option>
+                                    <option value="cosine">cosine</option>
+                                    <option value="l1">l1</option>
+                                    <option value="l2">l2</option>
+                                    <option value="manhattan">manhattan</option>
+                                    <option value="braycurtis">braycurtis</option>
+                                    <option value="canberra">canberra</option>
+                                    <option value="chebyshev">chebyshev</option>
+                                    <option value="correlation">correlation</option>
+                                    <option value="dice">dice</option>
+                                    <option value="hamming">hamming</option>
+                                    <option value="jaccard">jaccard</option>
+                                    <option value="kulsinski">kulsinski</option>
+                                    <option value="mahalanobis">mahalanobis</option>
+                                    <option value="minkowski">minkowski</option>
+                                    <option value="rogerstanimoto">rogerstanimoto</option>
+                                    <option value="russellrao">russellrao</option>
+                                    <option value="seuclidean">seuclidean</option>
+                                    <option value="sokalmichener">sokalmichener</option>
+                                    <option value="sokalsneath">sokalsneath</option>
+                                    <option value="sqeuclidean">sqeuclidean</option>
+                                    <option value="yule">yule</option>
+                                </select>
+                                <small class="text-muted">Distance metric from scikit-learn's pairwise_distances (optional)</small>
+                            </div>
+
+                            <div class="mb-3">
                                 <label for="algorithm" class="form-label">Selection Method</label>
                                 <select class="form-select" id="algorithm" name="algorithm">
                                     <optgroup label="Distance-based Methods">
@@ -480,10 +517,8 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label">Algorithm Parameters</label>
-                                <div id="parameters" class="bg-light p-3 rounded">
-                                    <!-- Parameters will be dynamically added here -->
-                                </div>
+                                <label for="parameters" class="form-label">Additional Parameters (JSON format)</label>
+                                <textarea class="form-control font-monospace" id="parameters" name="parameters" rows="10"></textarea>
                             </div>
 
                             <div class="d-grid gap-2">
@@ -506,9 +541,18 @@
                                 <p>Selected indices:</p>
                                 <pre id="indices" class="bg-light p-3 rounded"></pre>
 
+                                <div class="mb-3">
+                                    <label class="form-label">Download Format</label>
+                                    <select class="form-select" id="downloadFormat">
+                                        <option value="npz">NPZ</option>
+                                        <option value="xlsx">Excel</option>
+                                        <option value="txt">TXT</option>
+                                    </select>
+                                </div>
+
                                 <div class="d-grid gap-2">
-                                    <button type="button" class="btn btn-success" onclick="downloadIndices()">
-                                        <i class="bi bi-download me-2"></i>Download Indices
+                                    <button type="button" class="btn btn-success" onclick="downloadResult()">
+                                        <i class="bi bi-download me-2"></i>Download Selected Indices
                                     </button>
                                 </div>
                             </div>
@@ -629,45 +673,32 @@
             setInterval(checkServerStatus, 30000);
         });
 
-        function formatMatrix(matrix) {
-            // Return the matrix as is, without formatting
-            return matrix;
-        }
-
         async function updateDefaultParams() {
             const algorithm = document.getElementById('algorithm').value;
+            const parametersTextarea = document.getElementById('parameters');
+            
             try {
-                const response = await fetch(`/get_default_selection_params/${algorithm}`);
+                const response = await fetch(`/get_default_params/${algorithm}`);
                 const data = await response.json();
-                document.getElementById('parameters').innerHTML = '';
-
-                for (const [key, value] of Object.entries(data)) {
-                    const formGroup = document.createElement('div');
-                    formGroup.className = 'mb-3';
-
-                    const label = document.createElement('label');
-                    label.className = 'form-label';
-                    label.textContent = key;
-
-                    const input = document.createElement('input');
-                    input.type = typeof value === 'number' ? 'number' : 'text';
-                    input.className = 'form-control';
-                    input.name = key;
-                    input.value = value;
-                    input.dataset.defaultValue = value;
-
-                    formGroup.appendChild(label);
-                    formGroup.appendChild(input);
-                    document.getElementById('parameters').appendChild(formGroup);
+                
+                if (response.ok) {
+                    // Format the parameters nicely
+                    parametersTextarea.value = JSON.stringify(data, null, 2);
+                } else {
+                    console.error('Error getting default parameters:', data.error);
+                    parametersTextarea.value = '{}';
                 }
             } catch (error) {
                 console.error('Error:', error);
-                document.getElementById('parameters').innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+                parametersTextarea.value = '{}';
             }
         }
 
+        // Update parameters when algorithm changes
         document.getElementById('algorithm').addEventListener('change', updateDefaultParams);
-        updateDefaultParams();
+
+        // Update parameters when page loads
+        document.addEventListener('DOMContentLoaded', updateDefaultParams);
 
         document.getElementById('selectionForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -679,13 +710,14 @@
             const successContent = document.getElementById('success-content');
             const indicesDiv = document.getElementById('indices');
 
-            // Collect parameters
-            const parameters = {};
-            document.querySelectorAll('#parameters input').forEach(input => {
-                const value = input.type === 'number' ? parseFloat(input.value) : input.value;
-                parameters[input.name] = value;
-            });
-            formData.append('parameters', JSON.stringify(parameters));
+            // Validate size is an integer
+            const size = parseInt(formData.get('size'));
+            if (isNaN(size) || size < 1 || size !== parseFloat(formData.get('size'))) {
+                errorDiv.textContent = "Subset size must be a positive integer";
+                errorDiv.style.display = 'block';
+                resultSection.style.display = 'block';
+                return;
+            }
 
             try {
                 const response = await fetch('/upload_selection', {
@@ -711,9 +743,7 @@
                     // Show results
                     indicesDiv.textContent = JSON.stringify(data.indices, null, 2);
                     successContent.style.display = 'block';
-
-                    // Store upload directory for download
-                    successContent.dataset.uploadDir = data.upload_dir;
+                    window.resultData = data;
                 } else {
                     throw new Error(data.error || 'Failed to process selection');
                 }
@@ -724,18 +754,34 @@
             }
         });
 
-        // Function to download indices
-        async function downloadIndices() {
-            const successContent = document.getElementById('success-content');
-            const uploadDir = successContent.dataset.uploadDir;
+        async function downloadResult() {
+            if (!window.resultData) return;
 
-            if (!uploadDir) {
-                console.error('No upload directory found');
-                return;
-            }
+            const format = document.getElementById('downloadFormat').value;
+            const formData = new FormData();
+            formData.append('data', JSON.stringify(window.resultData.indices));
+            formData.append('format', format);
 
             try {
-                window.location.href = `/download/${uploadDir}`;
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `selected_indices.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'An error occurred during download');
+                }
             } catch (error) {
                 console.error('Error:', error);
                 alert('Failed to download indices: ' + error.message);

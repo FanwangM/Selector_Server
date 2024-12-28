@@ -16,6 +16,7 @@ import pandas as pd
 from selector.methods.distance import MaxMin, MaxSum, OptiSim, DISE
 from selector.methods.partition import GridPartition, Medoid
 from selector.methods.similarity import NSimilarity
+from sklearn.metrics import pairwise_distances
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,22 +24,13 @@ import orjson
 import pandas as pd
 from flask import Flask, Response, render_template, request, send_file
 from flask_status import FlaskStatus
-from procrustes import (
-    generalized,
-    generic,
-    kopt_heuristic_double,
-    kopt_heuristic_single,
-    orthogonal,
-    orthogonal_2sided,
-    permutation,
-    permutation_2sided,
-    rotational,
-    softassign,
-    symmetric,
-)
 from werkzeug.utils import secure_filename
 
-from celery_config import celery
+try:
+    from celery_config import celery
+    CELERY_AVAILABLE = True
+except ImportError:
+    CELERY_AVAILABLE = False
 
 app = Flask(__name__)
 app_status = FlaskStatus(app)
@@ -156,37 +148,31 @@ def read_markdown_file(filename):
 
 
 def get_default_parameters(func):
-    """
-    Collect the default arguments of a given function as a dictionary.
-
-    Parameters
-    ----------
-    func : Callable
-        The function to inspect.
-
-    Returns
-    -------
-    Dict[str, object]
-        A dictionary where keys are parameter names and values are their default values.
-
-    """
-    signature = inspect.signature(func)
-    return {
-        name: param.default
-        for name, param in signature.parameters.items()
-        if param.default is not inspect.Parameter.empty
-    }
+    """Get default parameters for a function from its signature."""
+    sig = inspect.signature(func)
+    defaults = {}
+    
+    for name, param in sig.parameters.items():
+        if name == 'self' or name == 'fun_dist':  # Skip self and fun_dist
+            continue
+        if param.default is not param.empty:
+            defaults[name] = param.default
+    
+    return defaults
 
 
 @app.route("/get_default_params/<algorithm>")
 def get_default_params(algorithm):
     """API endpoint to get default parameters for an algorithm."""
-    if algorithm not in ALGORITHM_MAP:
+    if algorithm not in SELECTION_ALGORITHM_MAP:
         return create_json_response({"error": f"Unknown algorithm: {algorithm}"}, 400)
 
     try:
-        func = ALGORITHM_MAP[algorithm]
-        return create_json_response(get_default_parameters(func))
+        # Get the algorithm class
+        algorithm_class = SELECTION_ALGORITHM_MAP[algorithm]
+        # Get default parameters from __init__
+        params = get_default_parameters(algorithm_class.__init__)
+        return create_json_response(params)
     except Exception as e:
         return create_json_response({"error": f"Error getting parameters: {str(e)}"}, 500)
 
@@ -198,8 +184,7 @@ def get_default_selection_params(algorithm):
         return create_json_response({"error": f"Algorithm unsupported: {algorithm}"}, 400)
 
     try:
-        func = SELECTION_ALGORITHM_MAP[algorithm]
-        return create_json_response(get_default_parameters(func))
+        return create_json_response(get_default_selection_params(algorithm))
     except Exception as e:
         return create_json_response({"error": f"Error getting parameters: {str(e)}"}, 500)
 
@@ -218,78 +203,20 @@ def get_markdown(filename):
     return create_json_response({"html": html})
 
 
-def process_procrustes(array1, array2, algorithm, parameters):
-    """
-    Process two arrays using the specified Procrustes algorithm.
-
-    Parameters
-    ----------
-    array1 : np.ndarray
-        First input array
-    array2 : np.ndarray
-        Second input array
-    algorithm : str
-        Name of the Procrustes algorithm to use
-    parameters : dict
-        Parameters for the algorithm
-
-    Returns
-    -------
-    dict
-        Dictionary containing results and any warnings
-    """
-    warning_message = None
-
-    # Check for NaN values
-    if np.isnan(array1).any() or np.isnan(array2).any():
-        array1 = np.nan_to_num(array1)
-        array2 = np.nan_to_num(array2)
-        warning_message = "Input matrices contain NaN values. Replaced with 0."
-
-    # Apply Procrustes algorithm
-    if algorithm.lower() in ALGORITHM_MAP:
-        result = ALGORITHM_MAP[algorithm.lower()](array1, array2, **parameters)
-    else:
-        raise ValueError(f"Unknown algorithm: {algorithm}")
-
-    # Extract results
-    transformation = (
-        result.t
-        if hasattr(result, "t")
-        else result.t1 if hasattr(result, "t1") else np.eye(array1.shape[1])
-    )
-
-    new_array = (
-        result.new_array
-        if hasattr(result, "new_array")
-        else result.array_transformed if hasattr(result, "array_transformed") else array2
-    )
-
-    # Prepare response
-    response_data = {
-        "error": float(result.error),
-        "transformation": transformation,
-        "new_array": new_array,
-    }
-
-    if warning_message:
-        response_data["warning"] = warning_message
-
-    return response_data
-
-
-def process_selection(array, algorithm, parameters):
+def process_selection(arr, algorithm, parameters, fun_dist=None):
     """
     Process feature matrix using the specified selection algorithm.
 
     Parameters
     ----------
-    array : np.ndarray
+    arr : np.ndarray
         Input feature matrix
     algorithm : str
         Name of the selection algorithm to use
     parameters : dict
         Parameters for the algorithm
+    fun_dist : str, optional
+        Distance function to use.
 
     Returns
     -------
@@ -305,9 +232,31 @@ def process_selection(array, algorithm, parameters):
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
-        # Initialize and run the algorithm
-        selector = algorithm_class(**parameters)
-        indices = selector.select(array)
+        # Get size parameter
+        size = parameters.pop('size', None)
+        if size is None:
+            raise ValueError("Subset size must be specified")
+
+        try:
+            size = int(size)
+            if size < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError("Subset size must be a positive integer")
+
+        # Validate size against array dimensions
+        if size > arr.shape[0]:
+            raise ValueError(f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})")
+
+        # Initialize algorithm
+        collector = algorithm_class(**parameters)
+
+        # Apply distance function if provided
+        if fun_dist is not None and fun_dist != "":
+            arr_dist = pairwise_distances(arr, metric=fun_dist)
+            indices = collector.select(arr_dist, size=size)
+        else:
+            indices = collector.select(arr, size=size)
 
         result["success"] = True
         result["indices"] = indices.tolist()
@@ -315,87 +264,10 @@ def process_selection(array, algorithm, parameters):
     except Warning as w:
         result["warnings"].append(str(w))
     except Exception as e:
+        print(f"Error in process_selection: {str(e)}")  # Add logging
         result["error"] = str(e)
 
     return result
-
-
-@celery.task(bind=True)
-def process_matrices(self, algorithm, params, matrix1_data, matrix2_data):
-    """Celery task for processing matrices asynchronously."""
-    try:
-        # Convert lists back to numpy arrays
-        matrix1 = np.asarray(matrix1_data, dtype=float)
-        matrix2 = np.asarray(matrix2_data, dtype=float)
-
-        if matrix1.size == 0 or matrix2.size == 0:
-            raise ValueError("Empty matrix received")
-
-        return process_procrustes(matrix1, matrix2, algorithm, params)
-
-    except Exception as e:
-        return {"error": f"Processing error: {str(e)}"}
-
-
-@app.route("/upload", methods=["POST"])
-def upload_file():
-    """Handle file upload and process matrices."""
-    print("Received upload request")
-
-    if "file1" not in request.files or "file2" not in request.files:
-        return create_json_response({"error": "Both files are required"}, 400)
-
-    file1 = request.files["file1"]
-    file2 = request.files["file2"]
-    algorithm = request.form.get("algorithm", "orthogonal")
-
-    if file1.filename == "" or file2.filename == "":
-        return create_json_response({"error": "No selected files"}, 400)
-
-    if not (allowed_file(file1.filename) and allowed_file(file2.filename)):
-        return create_json_response({"error": "Invalid file type"}, 400)
-
-    # Create a unique directory for this upload
-    upload_dir = get_unique_upload_dir()
-
-    try:
-        # Parse parameters
-        try:
-            parameters = orjson.loads(request.form.get("parameters", "{}"))
-        except orjson.JSONDecodeError:
-            parameters = get_default_parameters(algorithm)
-
-        # Save files with unique names
-        file1_path = os.path.join(
-            upload_dir, secure_filename(str(uuid.uuid4()) + "_" + file1.filename)
-        )
-        file2_path = os.path.join(
-            upload_dir, secure_filename(str(uuid.uuid4()) + "_" + file2.filename)
-        )
-
-        with file_lock:
-            file1.save(file1_path)
-            file2.save(file2_path)
-
-        # Load data
-        array1 = load_data(file1_path)
-        array2 = load_data(file2_path)
-        print(f"Arrays loaded - shapes: {array1.shape}, {array2.shape}")
-
-        # Process the matrices
-        result = process_procrustes(array1, array2, algorithm, parameters)
-        return create_json_response(result)
-
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        import traceback
-
-        print(traceback.format_exc())
-        return create_json_response({"error": str(e)}, 500)
-
-    finally:
-        # Clean up the unique upload directory
-        clean_upload_dir(upload_dir)
 
 
 @app.route("/upload_selection", methods=["POST"])
@@ -417,105 +289,116 @@ def upload_selection_file():
         return create_json_response({"error": "No algorithm specified"}, 400)
 
     try:
+        # Get size parameter
+        size = request.form.get("size")
+        if not size:
+            return create_json_response({"error": "Subset size must be specified"}, 400)
+
+        # Get distance function
+        fun_dist = request.form.get("func_dist", "")
+
+        # Parse parameters
         parameters = orjson.loads(request.form.get("parameters", "{}"))
+        parameters['size'] = size
+
+        # Create a unique directory for this upload
+        upload_dir = get_unique_upload_dir()
+
+        try:
+            # Save file with unique name
+            file_path = os.path.join(
+                upload_dir, secure_filename(str(uuid.uuid4()) + "_" + file.filename)
+            )
+
+            with file_lock:
+                file.save(file_path)
+
+            # Load data
+            array = load_data(file_path)
+
+            # Process the selection with separate fun_dist parameter
+            result = process_selection(array, algorithm, parameters, fun_dist=fun_dist)
+            return create_json_response(result)
+
+        except Exception as e:
+            return create_json_response({"error": str(e)}, 500)
+
+        finally:
+            # Clean up the unique upload directory
+            clean_upload_dir(upload_dir)
+
     except Exception as e:
         return create_json_response({"error": f"Invalid parameters: {str(e)}"}, 400)
 
-    # Create unique upload directory
-    upload_dir = get_unique_upload_dir()
 
+@app.route("/download", methods=["POST"])
+def download():
     try:
-        # Save and process file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(upload_dir, filename)
-        file.save(filepath)
+        data = orjson.loads(request.form["data"])
+        format_type = request.form["format"]
 
-        # Load data
-        array = load_data(filepath)
+        # Create temporary file
+        temp_dir = tempfile.mkdtemp()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"selected_indices_{timestamp}"
 
-        # Process selection
-        result = process_selection(array, algorithm, parameters)
+        if format_type == "npz":
+            filepath = os.path.join(temp_dir, f"{filename}.npz")
+            np.savez(filepath, indices=np.array(data))
+        elif format_type == "xlsx":
+            filepath = os.path.join(temp_dir, f"{filename}.xlsx")
+            pd.DataFrame(data, columns=["Index"]).to_excel(filepath, index=False)
+        else:  # txt
+            filepath = os.path.join(temp_dir, f"{filename}.txt")
+            np.savetxt(filepath, np.array(data), fmt="%d")
 
-        if result["success"]:
-            # Save indices for later download
-            indices_path = os.path.join(upload_dir, "indices.txt")
-            np.savetxt(indices_path, result["indices"], fmt="%d")
-
-            return create_json_response({
-                "success": True,
-                "warnings": result["warnings"],
-                "indices": result["indices"],
-                "upload_dir": upload_dir
-            })
-        else:
-            return create_json_response({
-                "success": False,
-                "error": result["error"],
-                "warnings": result["warnings"]
-            })
-
+        return send_file(filepath, as_attachment=True)
     except Exception as e:
         return create_json_response({"error": str(e)}, 500)
     finally:
-        # Clean up
-        clean_upload_dir(upload_dir)
-
-
-@app.route("/download/<upload_dir>")
-def download(upload_dir):
-    """Download selected indices."""
-    try:
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], upload_dir, "indices.txt")
-        return send_file(filepath, as_attachment=True, download_name="selected_indices.txt")
-    except Exception as e:
-        return create_json_response({"error": str(e)}, 500)
-
-
-@app.route("/status/<task_id>")
-def task_status(task_id):
-    task = process_matrices.AsyncResult(task_id)
-    if task.state == "PENDING":
-        response = {"state": task.state, "status": "Pending..."}
-    elif task.state != "FAILURE":
-        response = {
-            "state": task.state,
-            "result": task.result,
-        }
-        if task.state == "SUCCESS":
-            response["status"] = "Task completed!"
-        else:
-            response["status"] = "Processing..."
-    else:
-        response = {
-            "state": task.state,
-            "status": str(task.info),
-        }
-    return create_json_response(response)
+        # Clean up temporary directory after sending file
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception:
+            pass
 
 
 @app.route("/status")
 def server_status():
     """Return server status"""
-    status = {"status": "ok", "components": {"flask": True, "celery": False, "redis": False}}
+    status = {
+        "status": "ok",
+        "message": "Server is running",
+        "timestamp": datetime.now().isoformat(),
+        "components": {
+            "flask": True,
+            "celery": False,
+            "redis": False
+        }
+    }
 
-    # Check Celery
-    try:
-        celery.control.ping(timeout=1)
-        status["components"]["celery"] = True
-    except Exception as e:
-        print(f"Celery check failed: {e}")
+    if CELERY_AVAILABLE:
+        # Check Celery
+        try:
+            celery.control.ping(timeout=1)
+            status["components"]["celery"] = True
+        except Exception as e:
+            print(f"Celery check failed: {e}")
 
-    # Check Redis
-    try:
-        redis_client = celery.backend.client
-        redis_client.ping()
-        status["components"]["redis"] = True
-    except Exception as e:
-        print(f"Redis check failed: {e}")
+        # Check Redis
+        try:
+            redis_client = celery.backend.client
+            redis_client.ping()
+            status["components"]["redis"] = True
+        except Exception as e:
+            print(f"Redis check failed: {e}")
 
-    # Set overall status based on components
-    if not all(status["components"].values()):
-        status["status"] = "degraded"
+        # Set overall status
+        if not all(status["components"].values()):
+            status["status"] = "degraded"
+            status["message"] = "Some components are not available"
+    else:
+        status["message"] = "Running without Celery/Redis support"
 
     return create_json_response(status)
 
