@@ -10,24 +10,21 @@ from datetime import datetime
 from typing import Callable, Dict
 
 import markdown
-import numpy as np
-import orjson
-import pandas as pd
-from selector.methods.distance import MaxMin, MaxSum, OptiSim, DISE
-from selector.methods.partition import GridPartition, Medoid
-from selector.methods.similarity import NSimilarity
-from sklearn.metrics import pairwise_distances
-
 import matplotlib.pyplot as plt
 import numpy as np
 import orjson
 import pandas as pd
 from flask import Flask, Response, render_template, request, send_file
 from flask_status import FlaskStatus
+from selector.methods.distance import DISE, MaxMin, MaxSum, OptiSim
+from selector.methods.partition import GridPartition, Medoid
+from selector.methods.similarity import NSimilarity
+from sklearn.metrics import pairwise_distances
 from werkzeug.utils import secure_filename
 
 try:
     from celery_config import celery
+
     CELERY_AVAILABLE = True
 except ImportError:
     CELERY_AVAILABLE = False
@@ -151,13 +148,13 @@ def get_default_parameters(func):
     """Get default parameters for a function from its signature."""
     sig = inspect.signature(func)
     defaults = {}
-    
+
     for name, param in sig.parameters.items():
-        if name == 'self' or name == 'fun_dist':  # Skip self and fun_dist
+        if name == "self" or name == "fun_dist":  # Skip self and fun_dist
             continue
         if param.default is not param.empty:
             defaults[name] = param.default
-    
+
     return defaults
 
 
@@ -203,7 +200,7 @@ def get_markdown(filename):
     return create_json_response({"html": html})
 
 
-def process_selection(arr, algorithm, parameters, fun_dist=None):
+def process_selection(arr, algorithm, parameters, size, fun_dist_str=None):
     """
     Process feature matrix using the specified selection algorithm.
 
@@ -215,7 +212,9 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
         Name of the selection algorithm to use
     parameters : dict
         Parameters for the algorithm
-    fun_dist : str, optional
+    size : int
+        Number of samples to select.
+    fun_dist_str : str, optional
         Distance function to use.
 
     Returns
@@ -223,8 +222,9 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
     dict
         Dictionary containing results and any warnings
     """
-    warnings.filterwarnings('error')  # Convert warnings to exceptions
-    result = {"success": False, "error": None, "warnings": [], "indices": None}
+    ## Convert warnings to exceptions
+    # warnings.filterwarnings("error")
+    result = {"success": False, "indices": None}
 
     try:
         # Get the algorithm class
@@ -232,40 +232,26 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
-        # Get size parameter
-        size = parameters.pop('size', None)
-        if size is None:
-            raise ValueError("Subset size must be specified")
-
-        try:
-            size = int(size)
-            if size < 1:
-                raise ValueError
-        except (TypeError, ValueError):
-            raise ValueError("Subset size must be a positive integer")
-
-        # Validate size against array dimensions
-        if size > arr.shape[0]:
-            raise ValueError(f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})")
-
         # Initialize algorithm
-        collector = algorithm_class(**parameters)
-
-        # Apply distance function if provided
-        if fun_dist is not None and fun_dist != "":
-            arr_dist = pairwise_distances(arr, metric=fun_dist)
-            indices = collector.select(arr_dist, size=size)
+        if algorithm_class.__name__ in ["MaxMin", "MaxSum", "OptiSim", "DISE"]:
+            collector = algorithm_class(**parameters, fun_dist=None)
+            if fun_dist_str is not None and fun_dist_str != "":
+                arr_dist = pairwise_distances(arr, metric=fun_dist_str)
+                indices = collector.select(arr_dist, size=size)
+            else:
+                indices = collector.select(arr, size=size)
         else:
+            collector = algorithm_class(**parameters)
             indices = collector.select(arr, size=size)
 
         result["success"] = True
         result["indices"] = indices.tolist()
 
     except Warning as w:
-        result["warnings"].append(str(w))
+        result["success"] = False
     except Exception as e:
         print(f"Error in process_selection: {str(e)}")  # Add logging
-        result["error"] = str(e)
+        result["success"] = False
 
     return result
 
@@ -290,16 +276,15 @@ def upload_selection_file():
 
     try:
         # Get size parameter
-        size = request.form.get("size")
+        size = int(request.form.get("size"))
         if not size:
             return create_json_response({"error": "Subset size must be specified"}, 400)
 
         # Get distance function
-        fun_dist = request.form.get("func_dist", "")
+        fun_dist_str = request.form.get("func_dist", "")
 
         # Parse parameters
         parameters = orjson.loads(request.form.get("parameters", "{}"))
-        parameters['size'] = size
 
         # Create a unique directory for this upload
         upload_dir = get_unique_upload_dir()
@@ -317,7 +302,9 @@ def upload_selection_file():
             array = load_data(file_path)
 
             # Process the selection with separate fun_dist parameter
-            result = process_selection(array, algorithm, parameters, fun_dist=fun_dist)
+            result = process_selection(
+                array, algorithm, parameters, size=size, fun_dist_str=fun_dist_str
+            )
             return create_json_response(result)
 
         except Exception as e:
@@ -370,11 +357,7 @@ def server_status():
         "status": "ok",
         "message": "Server is running",
         "timestamp": datetime.now().isoformat(),
-        "components": {
-            "flask": True,
-            "celery": False,
-            "redis": False
-        }
+        "components": {"flask": True, "celery": False, "redis": False},
     }
 
     if CELERY_AVAILABLE:
