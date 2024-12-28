@@ -710,6 +710,12 @@
             const successContent = document.getElementById('success-content');
             const indicesDiv = document.getElementById('indices');
 
+            // Debug log form data
+            console.log('Form data:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key, ':', value);
+            }
+
             // Validate size is an integer
             const size = parseInt(formData.get('size'));
             if (isNaN(size) || size < 1 || size !== parseFloat(formData.get('size'))) {
@@ -726,6 +732,7 @@
                 });
 
                 const data = await response.json();
+                console.log('Response data:', data);
 
                 // Reset display
                 resultSection.style.display = 'block';
@@ -736,20 +743,20 @@
                 if (response.ok && data.success) {
                     // Show warnings if any
                     if (data.warnings && data.warnings.length > 0) {
-                        warningsDiv.innerHTML = data.warnings.join('<br>');
+                        warningsDiv.textContent = 'Warnings: ' + data.warnings.join(', ');
                         warningsDiv.style.display = 'block';
                     }
 
                     // Show results
                     indicesDiv.textContent = JSON.stringify(data.indices, null, 2);
                     successContent.style.display = 'block';
-                    window.resultData = data;
                 } else {
-                    throw new Error(data.error || 'Failed to process selection');
+                    errorDiv.textContent = data.error || 'Failed to process selection';
+                    errorDiv.style.display = 'block';
                 }
             } catch (error) {
                 console.error('Error:', error);
-                errorDiv.textContent = error.message;
+                errorDiv.textContent = 'Error processing request: ' + error.message;
                 errorDiv.style.display = 'block';
             }
         });
