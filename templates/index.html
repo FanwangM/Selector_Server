@@ -470,7 +470,6 @@
                             <div class="mb-3">
                                 <label for="distance_metric" class="form-label">Distance Function</label>
                                 <select class="form-select" id="distance_metric" name="distance_metric">
-                                    <option value="">None</option>
                                     <option value="euclidean">euclidean</option>
                                     <option value="cityblock">cityblock</option>
                                     <option value="cosine">cosine</option>
@@ -676,11 +675,11 @@
         async function updateDefaultParams() {
             const algorithm = document.getElementById('algorithm').value;
             const parametersTextarea = document.getElementById('parameters');
-            
+
             try {
                 const response = await fetch(`/get_default_params/${algorithm}`);
                 const data = await response.json();
-                
+
                 if (response.ok) {
                     // Format the parameters nicely
                     parametersTextarea.value = JSON.stringify(data, null, 2);

@@ -150,7 +150,7 @@ def get_default_parameters(func):
     defaults = {}
 
     for name, param in sig.parameters.items():
-        if name == "self" or name == "fun_dist":  # Skip self and fun_dist
+        if name == "self" or name == "fun_dist":  # Skip self and dist_metric
             continue
         if param.default is not param.empty:
             defaults[name] = param.default
@@ -200,7 +200,7 @@ def get_markdown(filename):
     return create_json_response({"html": html})
 
 
-def process_selection(arr, algorithm, parameters, fun_dist=None):
+def process_selection(arr, algorithm, parameters, dist_metric):
     """
     Process feature matrix using the specified selection algorithm.
 
@@ -212,7 +212,7 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
         Name of the selection algorithm to use
     parameters : dict
         Parameters for the algorithm
-    fun_dist : str, optional
+    dist_metric : str, optional
         Distance function to use.
 
     Returns
@@ -224,7 +224,7 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
     result = {"success": False, "error": None, "warnings": [], "indices": None}
 
     try:
-        print(f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, fun_dist={fun_dist}")
+        print(f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, dist_metric={dist_metric}")
         print(f"Debug - Array shape: {arr.shape}")
 
         # Get the algorithm class
@@ -257,16 +257,11 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
         is_distance_based = algorithm in ["MaxMin", "MaxSum", "OptiSim", "DISE"]
 
         if is_distance_based:
-            # For distance-based methods, we need to handle the distance matrix
-            if fun_dist is not None and fun_dist != "":
-                print(f"Debug - Calculating pairwise distances with metric: {fun_dist}")
-                arr_dist = pairwise_distances(arr, metric=fun_dist)
-                print(f"Debug - Distance matrix shape: {arr_dist.shape}")
-            else:
-                print("Debug - Using input as distance matrix")
-                # If no distance function provided, assume input is already a distance matrix
-                # or compute euclidean distances by default
-                arr_dist = pairwise_distances(arr, metric='euclidean')
+            # For distance-based methods, always compute the distance matrix
+            metric = dist_metric if dist_metric and dist_metric != "" else "euclidean"
+            print(f"Debug - Computing distance matrix with metric: {metric}")
+            arr_dist = pairwise_distances(arr, metric=metric)
+            print(f"Debug - Distance matrix shape: {arr_dist.shape}")
         else:
             # For non-distance-based methods, use the original array
             print("Debug - Using original array for non-distance-based method")
@@ -276,9 +271,9 @@ def process_selection(arr, algorithm, parameters, fun_dist=None):
         collector = algorithm_class(**parameters)
         indices = collector.select(arr_dist, size=size)
 
-        print(f"Debug - Selected indices: {indices[:5]}...")
+        print(f"Debug - Selected indices: {indices}")
         result["success"] = True
-        result["indices"] = indices
+        result["indices"] = indices.tolist() if isinstance(indices, np.ndarray) else indices
 
     except Warning as w:
         print(f"Debug - Warning caught: {str(w)}")
@@ -324,8 +319,8 @@ def upload_selection_file():
         print(f"Debug - Size: {size}")
 
         # Get distance function
-        fun_dist = request.form.get("func_dist", "")
-        print(f"Debug - Distance function: {fun_dist}")
+        dist_metric = request.form.get("func_dist", "")
+        print(f"Debug - Distance function: {dist_metric}")
 
         # Parse parameters
         try:
@@ -356,8 +351,8 @@ def upload_selection_file():
             array = load_data(file_path)
             print(f"Debug - Loaded array with shape: {array.shape}")
 
-            # Process the selection with separate fun_dist parameter
-            result = process_selection(array, algorithm, parameters, fun_dist=fun_dist)
+            # Process the selection with separate dist_metric parameter
+            result = process_selection(array, algorithm, parameters, dist_metric)
             print(f"Debug - Process selection result: {result}")
 
             return create_json_response(result)
