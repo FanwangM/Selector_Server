@@ -537,23 +537,17 @@
                             <div id="error" class="alert alert-danger" style="display: none;"></div>
 
                             <div id="success-content" style="display: none;">
-                                <p>Selected indices:</p>
-                                <pre id="indices" class="bg-light p-3 rounded"></pre>
-
+                                <h4>Selected Indices:</h4>
+                                <pre id="indices"></pre>
                                 <div class="mb-3">
-                                    <label class="form-label">Download Format</label>
-                                    <select class="form-select" id="downloadFormat">
+                                    <label for="download-format" class="form-label">Download Format</label>
+                                    <select class="form-select" id="download-format">
+                                        <option value="txt">TXT</option>
                                         <option value="npz">NPZ</option>
                                         <option value="xlsx">Excel</option>
-                                        <option value="txt">TXT</option>
                                     </select>
                                 </div>
-
-                                <div class="d-grid gap-2">
-                                    <button type="button" class="btn btn-success" onclick="downloadResult()">
-                                        <i class="bi bi-download me-2"></i>Download Selected Indices
-                                    </button>
-                                </div>
+                                <button class="btn btn-primary" onclick="downloadIndices()">Download Results</button>
                             </div>
                         </div>
                     </div>
@@ -615,7 +609,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let resultData = null;
+        let currentIndices = null;  // Store the current indices globally
 
         // Sidebar toggle functionality
         const sidebar = document.getElementById('sidebar');
@@ -699,6 +693,50 @@
         // Update parameters when page loads
         document.addEventListener('DOMContentLoaded', updateDefaultParams);
 
+        async function downloadIndices() {
+            if (!currentIndices) {
+                console.error('No indices available for download');
+                return;
+            }
+
+            const format = document.getElementById('download-format').value;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        indices: currentIndices,
+                        format: format,
+                        timestamp: timestamp
+                    })
+                });
+
+                if (response.ok) {
+                    // Create a download link
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `selected_indices_${timestamp}.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } else {
+                    const error = await response.json();
+                    console.error('Download failed:', error);
+                    alert('Failed to download results: ' + (error.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Error downloading results: ' + error.message);
+            }
+        }
+
         document.getElementById('selectionForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -709,17 +747,10 @@
             const successContent = document.getElementById('success-content');
             const indicesDiv = document.getElementById('indices');
 
-            // Debug log form data
-            console.log('Form data:');
-            for (let [key, value] of formData.entries()) {
-                console.log(key, ':', value);
-            }
-
             // Validate size is an integer
             const size = parseInt(formData.get('size'));
             if (isNaN(size) || size < 1 || size !== parseFloat(formData.get('size'))) {
-                errorDiv.textContent = "Subset size must be a positive integer";
-                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Size must be a positive integer';
                 resultSection.style.display = 'block';
                 return;
             }
@@ -740,6 +771,9 @@
                 successContent.style.display = 'none';
 
                 if (response.ok && data.success) {
+                    // Store the indices globally
+                    currentIndices = data.indices;
+
                     // Show warnings if any
                     if (data.warnings && data.warnings.length > 0) {
                         warningsDiv.textContent = 'Warnings: ' + data.warnings.join(', ');
@@ -759,40 +793,6 @@
                 errorDiv.style.display = 'block';
             }
         });
-
-        async function downloadResult() {
-            if (!window.resultData) return;
-
-            const format = document.getElementById('downloadFormat').value;
-            const formData = new FormData();
-            formData.append('data', JSON.stringify(window.resultData.indices));
-            formData.append('format', format);
-
-            try {
-                const response = await fetch('/download', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `selected_indices.${format}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    a.remove();
-                } else {
-                    const data = await response.json();
-                    alert(data.error || 'An error occurred during download');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Failed to download indices: ' + error.message);
-            }
-        }
 
         // Server status check
         async function checkServerStatus() {

@@ -1,5 +1,6 @@
 # import json
 import inspect
+import io
 import os
 import shutil
 import tempfile
@@ -89,18 +90,17 @@ def load_data(filepath):
     except Exception as e:
         raise ValueError(f"Error loading file {filepath}: {str(e)}")
 
+    # def save_data(data, format_type):
+    #     """Save data in the specified format."""
+    #     temp_dir = tempfile.mkdtemp()
+    #     filename = os.path.join(temp_dir, f"result.{format_type}")
 
-def save_data(data, format_type):
-    """Save data in the specified format."""
-    temp_dir = tempfile.mkdtemp()
-    filename = os.path.join(temp_dir, f"result.{format_type}")
-
-    if format_type == "npz":
-        np.savez(filename, result=data)
-    elif format_type == "txt":
-        np.savetxt(filename, data)
-    elif format_type in ["xlsx", "xls"]:
-        pd.DataFrame(data).to_excel(filename, index=False)
+    #     if format_type == "npz":
+    #         np.savez(filename, result=data)
+    #     elif format_type == "txt":
+    #         np.savetxt(filename, data)
+    #     elif format_type in ["xlsx"]:
+    #         pd.DataFrame(data).to_excel(filename, index=False)
 
     return filename
 
@@ -220,11 +220,13 @@ def process_selection(arr, algorithm, parameters, dist_metric):
     dict
         Dictionary containing results and any warnings
     """
-    warnings.filterwarnings('error')  # Convert warnings to exceptions
+    warnings.filterwarnings("error")  # Convert warnings to exceptions
     result = {"success": False, "error": None, "warnings": [], "indices": None}
 
     try:
-        print(f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, dist_metric={dist_metric}")
+        print(
+            f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, dist_metric={dist_metric}"
+        )
         print(f"Debug - Array shape: {arr.shape}")
 
         # Get the algorithm class
@@ -233,7 +235,7 @@ def process_selection(arr, algorithm, parameters, dist_metric):
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
         # Get size parameter
-        size = parameters.pop('size', None)
+        size = parameters.pop("size", None)
         if size is None:
             raise ValueError("Subset size must be specified")
 
@@ -248,7 +250,9 @@ def process_selection(arr, algorithm, parameters, dist_metric):
 
         # Validate size against array dimensions
         if size > arr.shape[0]:
-            raise ValueError(f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})")
+            raise ValueError(
+                f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})"
+            )
 
         # Initialize algorithm
         print(f"Debug - Initializing algorithm with parameters: {parameters}")
@@ -282,6 +286,7 @@ def process_selection(arr, algorithm, parameters, dist_metric):
         print(f"Debug - Error in process_selection: {str(e)}")
         print(f"Debug - Error type: {type(e)}")
         import traceback
+
         print(f"Debug - Traceback: {traceback.format_exc()}")
         result["error"] = str(e)
 
@@ -331,7 +336,7 @@ def upload_selection_file():
             parameters = {}
 
         # Add size to parameters
-        parameters['size'] = size
+        parameters["size"] = size
 
         # Create a unique directory for this upload
         upload_dir = get_unique_upload_dir()
@@ -372,34 +377,61 @@ def upload_selection_file():
 
 @app.route("/download", methods=["POST"])
 def download():
+    """Download selected indices in specified format."""
     try:
-        data = orjson.loads(request.form["data"])
-        format_type = request.form["format"]
+        data = request.get_json()
+        if not data or "indices" not in data:
+            return create_json_response({"error": "No indices provided"}, 400)
 
-        # Create temporary file
-        temp_dir = tempfile.mkdtemp()
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"selected_indices_{timestamp}"
+        indices = data["indices"]
+        format = data.get("format", "txt")
+        timestamp = data.get("timestamp", datetime.now().strftime("%Y%m%d-%H%M%S"))
 
-        if format_type == "npz":
-            filepath = os.path.join(temp_dir, f"{filename}.npz")
-            np.savez(filepath, indices=np.array(data))
-        elif format_type == "xlsx":
-            filepath = os.path.join(temp_dir, f"{filename}.xlsx")
-            pd.DataFrame(data, columns=["Index"]).to_excel(filepath, index=False)
-        else:  # txt
-            filepath = os.path.join(temp_dir, f"{filename}.txt")
-            np.savetxt(filepath, np.array(data), fmt="%d")
+        # Create a BytesIO buffer for the file
+        buffer = io.BytesIO()
 
-        return send_file(filepath, as_attachment=True)
+        # Define format-specific settings
+        format_settings = {
+            "txt": {
+                "extension": "txt",
+                "mimetype": "text/plain",
+                "processor": lambda b, d: b.write("\n".join(map(str, d)).encode()),
+            },
+            "npz": {
+                "extension": "npz",
+                "mimetype": "application/octet-stream",
+                "processor": lambda b, d: np.savez_compressed(b, indices=np.array(d)),
+            },
+            "xlsx": {
+                "extension": "xlsx",
+                "mimetype": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "processor": lambda b, d: pd.DataFrame({"selected_indices": d}).to_excel(
+                    b, index=False
+                ),
+            },
+        }
+
+        if format not in format_settings:
+            return create_json_response({"error": f"Unsupported format: {format}"}, 400)
+
+        settings = format_settings[format]
+
+        # Process the file
+        settings["processor"](buffer, indices)
+
+        # Create filename with correct extension
+        filename = f'selected_indices_{timestamp}.{settings["extension"]}'
+
+        # Seek to beginning of file
+        buffer.seek(0)
+
+        return send_file(
+            buffer, mimetype=settings["mimetype"], as_attachment=True, download_name=filename
+        )
+
     except Exception as e:
+        print(f"Error in download: {str(e)}")
         return create_json_response({"error": str(e)}, 500)
-    finally:
-        # Clean up temporary directory after sending file
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception:
-            pass
 
 
 @app.route("/status")
