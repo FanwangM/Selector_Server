@@ -220,22 +220,17 @@ def process_selection(arr, algorithm, parameters, dist_metric):
     dict
         Dictionary containing results and any warnings
     """
-    warnings.filterwarnings("error")  # Convert warnings to exceptions
+    warnings.filterwarnings('error')  # Convert warnings to exceptions
     result = {"success": False, "error": None, "warnings": [], "indices": None}
 
     try:
-        print(
-            f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, dist_metric={dist_metric}"
-        )
-        print(f"Debug - Array shape: {arr.shape}")
-
         # Get the algorithm class
         algorithm_class = SELECTION_ALGORITHM_MAP.get(algorithm)
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
         # Get size parameter
-        size = parameters.pop("size", None)
+        size = parameters.pop('size', None)
         if size is None:
             raise ValueError("Subset size must be specified")
 
@@ -246,48 +241,60 @@ def process_selection(arr, algorithm, parameters, dist_metric):
         except (TypeError, ValueError):
             raise ValueError("Subset size must be a positive integer")
 
-        print(f"Debug - Size parameter: {size}")
-
         # Validate size against array dimensions
         if size > arr.shape[0]:
-            raise ValueError(
-                f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})"
-            )
-
-        # Initialize algorithm
-        print(f"Debug - Initializing algorithm with parameters: {parameters}")
+            raise ValueError(f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})")
 
         # Handle distance-based methods differently
         is_distance_based = algorithm in ["MaxMin", "MaxSum", "OptiSim", "DISE"]
 
         if is_distance_based:
-            # For distance-based methods, always compute the distance matrix
-            metric = dist_metric if dist_metric and dist_metric != "" else "euclidean"
-            print(f"Debug - Computing distance matrix with metric: {metric}")
-            arr_dist = pairwise_distances(arr, metric=metric)
-            print(f"Debug - Distance matrix shape: {arr_dist.shape}")
+            # For distance-based methods, we need to handle the distance matrix
+            if dist_metric is not None and dist_metric != "":
+                try:
+                    # Convert array to float for distance computation
+                    arr_float = arr.astype(float)
+                    arr_dist = pairwise_distances(arr_float, metric=dist_metric)
+
+                    # Check if distance matrix is valid
+                    if not np.all(np.isfinite(arr_dist)):
+                        raise ValueError("Distance matrix contains invalid values (inf or nan)")
+                    if not np.allclose(arr_dist, arr_dist.T):
+                        raise ValueError("Distance matrix is not symmetric")
+                except Exception as e:
+                    raise ValueError(f"Error computing distance matrix: {str(e)}")
+            else:
+                arr_dist = arr.astype(float)
         else:
             # For non-distance-based methods, use the original array
-            print("Debug - Using original array for non-distance-based method")
-            arr_dist = arr
+            arr_dist = arr.astype(float)
 
         # Initialize and run the algorithm
-        collector = algorithm_class(**parameters)
-        indices = collector.select(arr_dist, size=size)
+        try:
+            collector = algorithm_class(**parameters)
 
-        print(f"Debug - Selected indices: {indices}")
-        result["success"] = True
-        result["indices"] = indices.tolist() if isinstance(indices, np.ndarray) else indices
+            indices = collector.select(arr_dist, size=size)
+
+            # Ensure indices are valid
+            if indices is None:
+                raise ValueError("Algorithm returned None instead of indices")
+            if len(indices) != size:
+                raise ValueError(f"Algorithm returned {len(indices)} indices but expected {size}")
+
+            # Convert indices to list and validate
+            indices_list = indices.tolist() if isinstance(indices, np.ndarray) else list(indices)
+            if not all(isinstance(i, (int, np.integer)) and 0 <= i < arr.shape[0] for i in indices_list):
+                raise ValueError("Algorithm returned invalid indices")
+
+            result["success"] = True
+            result["indices"] = indices_list
+
+        except Exception as e:
+            raise ValueError(f"Error executing algorithm: {str(e)}")
 
     except Warning as w:
-        print(f"Debug - Warning caught: {str(w)}")
         result["warnings"].append(str(w))
     except Exception as e:
-        print(f"Debug - Error in process_selection: {str(e)}")
-        print(f"Debug - Error type: {type(e)}")
-        import traceback
-
-        print(f"Debug - Traceback: {traceback.format_exc()}")
         result["error"] = str(e)
 
     return result
@@ -314,25 +321,18 @@ def upload_selection_file():
         if not algorithm:
             return create_json_response({"error": "No algorithm specified"}, 400)
 
-        print(f"Debug - Algorithm: {algorithm}")
-
         # Get size parameter
         size = request.form.get("size")
         if not size:
             return create_json_response({"error": "Subset size must be specified"}, 400)
 
-        print(f"Debug - Size: {size}")
-
         # Get distance function
         dist_metric = request.form.get("func_dist", "")
-        print(f"Debug - Distance function: {dist_metric}")
 
         # Parse parameters
         try:
             parameters = orjson.loads(request.form.get("parameters", "{}"))
-            print(f"Debug - Parsed parameters: {parameters}")
         except Exception as e:
-            print(f"Debug - Error parsing parameters: {e}")
             parameters = {}
 
         # Add size to parameters
@@ -340,30 +340,25 @@ def upload_selection_file():
 
         # Create a unique directory for this upload
         upload_dir = get_unique_upload_dir()
-        print(f"Debug - Created upload directory: {upload_dir}")
 
         try:
             # Save file with unique name
             file_path = os.path.join(
                 upload_dir, secure_filename(str(uuid.uuid4()) + "_" + file.filename)
             )
-            print(f"Debug - Saving file to: {file_path}")
 
             with file_lock:
                 file.save(file_path)
 
             # Load data
             array = load_data(file_path)
-            print(f"Debug - Loaded array with shape: {array.shape}")
 
             # Process the selection with separate dist_metric parameter
             result = process_selection(array, algorithm, parameters, dist_metric)
-            print(f"Debug - Process selection result: {result}")
 
             return create_json_response(result)
 
         except Exception as e:
-            print(f"Debug - Error in file processing: {str(e)}")
             return create_json_response({"error": str(e)}, 500)
 
         finally:
@@ -371,7 +366,6 @@ def upload_selection_file():
             clean_upload_dir(upload_dir)
 
     except Exception as e:
-        print(f"Debug - Error in upload_selection_file: {str(e)}")
         return create_json_response({"error": f"Error processing request: {str(e)}"}, 400)
 
 
