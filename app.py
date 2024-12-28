@@ -200,7 +200,7 @@ def get_markdown(filename):
     return create_json_response({"html": html})
 
 
-def process_selection(arr, algorithm, parameters, size, fun_dist_str=None):
+def process_selection(arr, algorithm, parameters, fun_dist=None):
     """
     Process feature matrix using the specified selection algorithm.
 
@@ -212,9 +212,7 @@ def process_selection(arr, algorithm, parameters, size, fun_dist_str=None):
         Name of the selection algorithm to use
     parameters : dict
         Parameters for the algorithm
-    size : int
-        Number of samples to select.
-    fun_dist_str : str, optional
+    fun_dist : str, optional
         Distance function to use.
 
     Returns
@@ -222,36 +220,75 @@ def process_selection(arr, algorithm, parameters, size, fun_dist_str=None):
     dict
         Dictionary containing results and any warnings
     """
-    ## Convert warnings to exceptions
-    # warnings.filterwarnings("error")
-    result = {"success": False, "indices": None}
+    warnings.filterwarnings('error')  # Convert warnings to exceptions
+    result = {"success": False, "error": None, "warnings": [], "indices": None}
 
     try:
+        print(f"Debug - Input parameters: algorithm={algorithm}, parameters={parameters}, fun_dist={fun_dist}")
+        print(f"Debug - Array shape: {arr.shape}")
+
         # Get the algorithm class
         algorithm_class = SELECTION_ALGORITHM_MAP.get(algorithm)
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
-        # Initialize algorithm
-        if algorithm_class.__name__ in ["MaxMin", "MaxSum", "OptiSim", "DISE"]:
-            collector = algorithm_class(**parameters, fun_dist=None)
-            if fun_dist_str is not None and fun_dist_str != "":
-                arr_dist = pairwise_distances(arr, metric=fun_dist_str)
-                indices = collector.select(arr_dist, size=size)
-            else:
-                indices = collector.select(arr, size=size)
-        else:
-            collector = algorithm_class(**parameters)
-            indices = collector.select(arr, size=size)
+        # Get size parameter
+        size = parameters.pop('size', None)
+        if size is None:
+            raise ValueError("Subset size must be specified")
 
+        try:
+            size = int(size)
+            if size < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError("Subset size must be a positive integer")
+
+        print(f"Debug - Size parameter: {size}")
+
+        # Validate size against array dimensions
+        if size > arr.shape[0]:
+            raise ValueError(f"Subset size ({size}) cannot be larger than the number of samples ({arr.shape[0]})")
+
+        # Initialize algorithm
+        print(f"Debug - Initializing algorithm with parameters: {parameters}")
+
+        # Handle distance-based methods differently
+        is_distance_based = algorithm in ["MaxMin", "MaxSum", "OptiSim", "DISE"]
+
+        if is_distance_based:
+            # For distance-based methods, we need to handle the distance matrix
+            if fun_dist is not None and fun_dist != "":
+                print(f"Debug - Calculating pairwise distances with metric: {fun_dist}")
+                arr_dist = pairwise_distances(arr, metric=fun_dist)
+                print(f"Debug - Distance matrix shape: {arr_dist.shape}")
+            else:
+                print("Debug - Using input as distance matrix")
+                # If no distance function provided, assume input is already a distance matrix
+                # or compute euclidean distances by default
+                arr_dist = pairwise_distances(arr, metric='euclidean')
+        else:
+            # For non-distance-based methods, use the original array
+            print("Debug - Using original array for non-distance-based method")
+            arr_dist = arr
+
+        # Initialize and run the algorithm
+        collector = algorithm_class(**parameters)
+        indices = collector.select(arr_dist, size=size)
+
+        print(f"Debug - Selected indices: {indices[:5]}...")
         result["success"] = True
-        result["indices"] = indices.tolist()
+        result["indices"] = indices
 
     except Warning as w:
-        result["success"] = False
+        print(f"Debug - Warning caught: {str(w)}")
+        result["warnings"].append(str(w))
     except Exception as e:
-        print(f"Error in process_selection: {str(e)}")  # Add logging
-        result["success"] = False
+        print(f"Debug - Error in process_selection: {str(e)}")
+        print(f"Debug - Error type: {type(e)}")
+        import traceback
+        print(f"Debug - Traceback: {traceback.format_exc()}")
+        result["error"] = str(e)
 
     return result
 
@@ -259,55 +296,74 @@ def process_selection(arr, algorithm, parameters, size, fun_dist_str=None):
 @app.route("/upload_selection", methods=["POST"])
 def upload_selection_file():
     """Handle file upload and process selection."""
-    if "file" not in request.files:
-        return create_json_response({"error": "No file provided"}, 400)
-
-    file = request.files["file"]
-    if file.filename == "":
-        return create_json_response({"error": "No file selected"}, 400)
-
-    if not allowed_file(file.filename):
-        return create_json_response({"error": "File type not allowed"}, 400)
-
-    # Get parameters
-    algorithm = request.form.get("algorithm")
-    if not algorithm:
-        return create_json_response({"error": "No algorithm specified"}, 400)
-
     try:
+        print("Debug - Starting upload_selection_file")
+
+        if "file" not in request.files:
+            return create_json_response({"error": "No file provided"}, 400)
+
+        file = request.files["file"]
+        if file.filename == "":
+            return create_json_response({"error": "No file selected"}, 400)
+
+        if not allowed_file(file.filename):
+            return create_json_response({"error": "File type not allowed"}, 400)
+
+        # Get parameters
+        algorithm = request.form.get("algorithm")
+        if not algorithm:
+            return create_json_response({"error": "No algorithm specified"}, 400)
+
+        print(f"Debug - Algorithm: {algorithm}")
+
         # Get size parameter
-        size = int(request.form.get("size"))
+        size = request.form.get("size")
         if not size:
             return create_json_response({"error": "Subset size must be specified"}, 400)
 
+        print(f"Debug - Size: {size}")
+
         # Get distance function
-        fun_dist_str = request.form.get("func_dist", "")
+        fun_dist = request.form.get("func_dist", "")
+        print(f"Debug - Distance function: {fun_dist}")
 
         # Parse parameters
-        parameters = orjson.loads(request.form.get("parameters", "{}"))
+        try:
+            parameters = orjson.loads(request.form.get("parameters", "{}"))
+            print(f"Debug - Parsed parameters: {parameters}")
+        except Exception as e:
+            print(f"Debug - Error parsing parameters: {e}")
+            parameters = {}
+
+        # Add size to parameters
+        parameters['size'] = size
 
         # Create a unique directory for this upload
         upload_dir = get_unique_upload_dir()
+        print(f"Debug - Created upload directory: {upload_dir}")
 
         try:
             # Save file with unique name
             file_path = os.path.join(
                 upload_dir, secure_filename(str(uuid.uuid4()) + "_" + file.filename)
             )
+            print(f"Debug - Saving file to: {file_path}")
 
             with file_lock:
                 file.save(file_path)
 
             # Load data
             array = load_data(file_path)
+            print(f"Debug - Loaded array with shape: {array.shape}")
 
             # Process the selection with separate fun_dist parameter
-            result = process_selection(
-                array, algorithm, parameters, size=size, fun_dist_str=fun_dist_str
-            )
+            result = process_selection(array, algorithm, parameters, fun_dist=fun_dist)
+            print(f"Debug - Process selection result: {result}")
+
             return create_json_response(result)
 
         except Exception as e:
+            print(f"Debug - Error in file processing: {str(e)}")
             return create_json_response({"error": str(e)}, 500)
 
         finally:
@@ -315,7 +371,8 @@ def upload_selection_file():
             clean_upload_dir(upload_dir)
 
     except Exception as e:
-        return create_json_response({"error": f"Invalid parameters: {str(e)}"}, 400)
+        print(f"Debug - Error in upload_selection_file: {str(e)}")
+        return create_json_response({"error": f"Error processing request: {str(e)}"}, 400)
 
 
 @app.route("/download", methods=["POST"])
