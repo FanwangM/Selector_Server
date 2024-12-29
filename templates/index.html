@@ -563,7 +563,55 @@
             <!-- Diversity Section -->
             <div id="diversity" class="section" style="display: none;">
                 <h2>Diversity Calculation</h2>
-                <p>This feature will be available soon.</p>
+                <div class="container mt-4">
+                    <form id="diversity-form" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="feature_subset" class="form-label">Feature Subset</label>
+                            <input type="file" class="form-control" id="feature_subset" name="feature_subset" accept=".csv,.xlsx,.xls">
+                            <small class="text-muted">Upload your feature subset matrix</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="features" class="form-label">Features (Optional)</label>
+                            <input type="file" class="form-control" id="features" name="features" accept=".csv,.xlsx,.xls">
+                            <small class="text-muted">Upload your features matrix (optional)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="div_type" class="form-label">Diversity Type</label>
+                            <select class="form-select" id="div_type" name="div_type">
+                                <option value="logdet">LogDet</option>
+                                <option value="shannon_entropy">Shannon Entropy</option>
+                                <option value="explicit_diversity_index">Explicit Diversity Index</option>
+                                <option value="wdud">WDUD</option>
+                                <option value="hypersphere_overlap_of_subset">Hypersphere Overlap</option>
+                                <option value="gini_coefficient">Gini Coefficient</option>
+                                <option value="nearest_average_tanimoto">Nearest Average Tanimoto</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="div_parameters" class="form-label">Additional Parameters (JSON format)</label>
+                            <textarea class="form-control font-monospace" id="div_parameters" name="div_parameters" rows="5"></textarea>
+                            <small class="text-muted">Specify normalize, truncation, and cs parameters in JSON format</small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Calculate Diversity</button>
+                        </div>
+
+                        <!-- Results section -->
+                        <div id="diversity-results" class="mt-4" style="display: none;">
+                            <h3>Results</h3>
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Diversity Score</h5>
+                                    <p class="card-text" id="diversity-score"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
 
             <!-- About Section -->
@@ -895,6 +943,57 @@
                 console.error('Error loading markdown content:', error);
             }
         }
+
+        document.getElementById('diversity-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const parameters = document.getElementById('div_parameters').value;
+            
+            try {
+                // Parse and add JSON parameters
+                const params = JSON.parse(parameters || '{}');
+                formData.set('div_parameters', JSON.stringify(params));
+                
+                const response = await fetch('/calculate_diversity', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Show results
+                    document.getElementById('diversity-results').style.display = 'block';
+                    document.getElementById('diversity-score').textContent = result.diversity_score;
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error calculating diversity: ' + error.message);
+            }
+        });
+
+        // Set default parameters when diversity type changes
+        document.getElementById('div_type').addEventListener('change', function() {
+            const defaultParams = {
+                normalize: false,
+                truncation: false,
+                cs: null
+            };
+            document.getElementById('div_parameters').value = JSON.stringify(defaultParams, null, 2);
+        });
+
+        // Initialize default parameters
+        document.addEventListener('DOMContentLoaded', function() {
+            const defaultParams = {
+                normalize: false,
+                truncation: false,
+                cs: null
+            };
+            document.getElementById('div_parameters').value = JSON.stringify(defaultParams, null, 2);
+        });
     </script>
 </body>
 </html>

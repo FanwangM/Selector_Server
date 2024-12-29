@@ -20,6 +20,7 @@ from flask_status import FlaskStatus
 from selector.methods.distance import DISE, MaxMin, MaxSum, OptiSim
 from selector.methods.partition import GridPartition, Medoid
 from selector.methods.similarity import NSimilarity
+from selector.measures.diversity import compute_diversity
 from sklearn.metrics import pairwise_distances
 from werkzeug.utils import secure_filename
 
@@ -437,6 +438,66 @@ def download():
 
     except Exception as e:
         print(f"Error in download: {str(e)}")
+        return create_json_response({"error": str(e)}, 500)
+
+
+@app.route("/calculate_diversity", methods=["POST"])
+def calculate_diversity():
+    """Calculate diversity score for the given feature subset."""
+    try:
+        # Get files from request
+        feature_subset_file = request.files.get('feature_subset')
+        features_file = request.files.get('features')
+        
+        if not feature_subset_file:
+            return create_json_response({"error": "Feature subset file is required"}, 400)
+
+        # Get other parameters
+        div_type = request.form.get('div_type', 'shannon_entropy')
+        div_parameters = orjson.loads(request.form.get('div_parameters', '{}'))
+
+        # Read feature subset
+        try:
+            feature_subset = load_data(feature_subset_file)
+        except Exception as e:
+            return create_json_response({"error": f"Error reading feature subset file: {str(e)}"}, 400)
+
+        # Read features if provided
+        features = None
+        if features_file:
+            try:
+                features = load_data(features_file)
+            except Exception as e:
+                return create_json_response({"error": f"Error reading features file: {str(e)}"}, 400)
+
+        # Extract parameters
+        normalize = div_parameters.get('normalize', False)
+        truncation = div_parameters.get('truncation', False)
+        cs = div_parameters.get('cs', None)
+
+        # Calculate diversity
+        try:
+            diversity_score = compute_diversity(
+                feature_subset=feature_subset,
+                div_type=div_type,
+                normalize=normalize,
+                truncation=truncation,
+                features=features,
+                cs=cs
+            )
+            
+            return create_json_response({
+                "success": True,
+                "diversity_score": float(diversity_score)
+            })
+
+        except Exception as e:
+            import traceback
+            print(f"Error calculating diversity: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return create_json_response({"error": f"Error calculating diversity: {str(e)}"}, 400)
+
+    except Exception as e:
         return create_json_response({"error": str(e)}, 500)
 
 
