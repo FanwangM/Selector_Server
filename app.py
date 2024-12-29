@@ -220,7 +220,6 @@ def process_selection(arr, algorithm, parameters, dist_metric):
     dict
         Dictionary containing results and any warnings
     """
-    warnings.filterwarnings('error')  # Convert warnings to exceptions
     result = {"success": False, "error": None, "warnings": [], "indices": None}
 
     try:
@@ -248,38 +247,35 @@ def process_selection(arr, algorithm, parameters, dist_metric):
         # Handle distance-based methods differently
         is_distance_based = algorithm in ["MaxMin", "MaxSum", "OptiSim", "DISE"]
 
-        if is_distance_based:
-            # For distance-based methods, we need to handle the distance matrix
-            if dist_metric is not None and dist_metric != "":
-                try:
-                    # Convert array to float for distance computation
-                    arr_float = arr.astype(float)
-                    arr_dist = pairwise_distances(arr_float, metric=dist_metric)
+        # Convert array to float for computations
+        arr_float = arr.astype(float)
 
-                    # Check if distance matrix is valid
-                    if not np.all(np.isfinite(arr_dist)):
-                        raise ValueError("Distance matrix contains invalid values (inf or nan)")
-                    if not np.allclose(arr_dist, arr_dist.T):
-                        raise ValueError("Distance matrix is not symmetric")
-                except Exception as e:
-                    raise ValueError(f"Error computing distance matrix: {str(e)}")
-            else:
-                arr_dist = arr.astype(float)
+        # Compute or prepare the input matrix
+        if is_distance_based:
+            # For distance-based methods, compute distance matrix
+            try:
+                if dist_metric and dist_metric != "":
+                    # Use specified distance metric
+                    arr_dist = pairwise_distances(arr_float, metric=dist_metric)
+                else:
+                    # Default to euclidean distance
+                    arr_dist = pairwise_distances(arr_float, metric='euclidean')
+            except Exception as e:
+                raise ValueError(f"Error computing distance matrix: {str(e)}")
         else:
-            # For non-distance-based methods, use the original array
-            arr_dist = arr.astype(float)
+            # For non-distance-based methods, use the original float array
+            arr_dist = arr_float
 
         # Initialize and run the algorithm
         try:
             collector = algorithm_class(**parameters)
-
             indices = collector.select(arr_dist, size=size)
 
             # Ensure indices are valid
             if indices is None:
                 raise ValueError("Algorithm returned None instead of indices")
             if len(indices) != size:
-                raise ValueError(f"Algorithm returned {len(indices)} indices but expected {size}")
+                warnings.warn(f"Algorithm returned {len(indices)} indices but expected {size}")
 
             # Convert indices to list and validate
             indices_list = indices.tolist() if isinstance(indices, np.ndarray) else list(indices)
@@ -466,3 +462,5 @@ def server_status():
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8008)
+    from flask_debugtoolbar import DebugToolbarExtension
+    toolbar = DebugToolbarExtension(app)
