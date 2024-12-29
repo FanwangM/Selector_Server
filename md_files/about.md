@@ -1,21 +1,21 @@
 ## Motivation
 
-[Procrustes](https://github.com/theochem/procrustes) is a free, open-source, and cross-platform Python library for (generalized) Procrustes problems with the goal of finding the optimal transformation(s) that makes two matrices as close as possible to each other. This package includes options to translate, scale, and zero-pad matrices, allowing matrices with different centers, scaling, and sizes to be considered.
+Selecting diverse and representative subsets is crucial for the data-driven models and machine learning applications in many science and engineering disciplines, especially for molecular design and drug discovery. Motivated by this, we develop the Selector package, a free and open-source Python library for selecting diverse subsets.
 
-Please use the following citation in any publication using the Procrustes library:
+The `Selector` library implements a range of existing algorithms for subset sampling based on the distance between and similarity of samples, as well as tools based on spatial partitioning. In addition, it includes seven diversity measures for quantifying the diversity of a given set. We also implemented various mathematical formulations to convert similarities into dissimilarities.
 
-**"Procrustes: A Python Library to Find Transformations that Maximize the Similarity Between Matrices"**, F. Meng, M. Richer, A. Tehrani, J. La, T. D. Kim, P. W. Ayers, F. Heidar-Zadeh, [Computer Physics Communications, 276(108334), 2022](https://doi.org/10.1016/j.cpc.2022.108334).
+## `Selector` Library
 
-## Description of Procrustes Methods
+Selector is a free, open-source, and cross-platform Python library designed to help you effortlessly identify the most diverse subset of molecules from your dataset. Please use the following citation in any publication using Selector library:
 
-Procrustes problems arise when one wishes to find one or two transformations, $\mathbf{T} \in \mathbb{R}^{n \times n}$ and $\mathbf{S} \in \mathbb{R}^{m \times m}$, that make matrix $\mathbf{A} \in \mathbb{R}^{m \times n}$ (input matrix) resemble matrix $\mathbf{B} \in \mathbb{R}^{m \times n}$ (target or reference matrix) as closely as possible:
+## Citation
+Please use the following citation in any publication using the `Selector` library:
 
-$$
-\min_{\mathbf{S}, \mathbf{T}} \| \mathbf{S}\mathbf{A}\mathbf{T} - \mathbf{B} \|_F^2
-$$
+**To be added**
 
-where the $F$ denotes the Frobenius norm. Here, $a_{ij}$ and $\text{Tr}(\mathbf{A})$ denote the $ij$-th element and trace of matrix $\mathbf{A}$, respectively. When $\mathbf{S}$ is an identity matrix, this is called a **one-sided Procrustes problem**, and when it is equal to $\mathbf{T}$, this becomes a **two-sided Procrustes problem with one transformation**. Otherwise, it is called a **two-sided Procrustes problem**. Different Procrustes problems use different choices for the transformation matrices $\mathbf{S}$ and $\mathbf{T}$, which are commonly taken to be orthogonal/unitary matrices, rotation matrices, symmetric matrices, or permutation matrices. For more detailed information, please refer to the [Procrustes documentation](https://procrustes.qcdevs.org/#).
+## More Information
 
+For more information about the Selector library, please visit our [GitHub repository](https://github.com/qcdevs/selector) and documentation at [https://selector.qcdevs.org](https://selector.qcdevs.org).
 
 ## Acknowledgments
 
