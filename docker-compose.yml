@@ -5,7 +5,7 @@ services:
     build: .
     command: gunicorn --config gunicorn_config.py app:app --reload
     expose:
-      - "8000"
+      - "8008"
     volumes:
       - .:/app
       - upload_data:/app/uploads
@@ -21,11 +21,6 @@ services:
           cpus: '1'
           memory: 2G
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   redis:
     image: redis:7-alpine
@@ -40,11 +35,6 @@ services:
           cpus: '0.5'
           memory: 1G
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   celery_worker:
     build: .
@@ -63,11 +53,6 @@ services:
           cpus: '1'
           memory: 2G
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "celery", "-A", "app.celery", "inspect", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   celery_flower:
     build: .
@@ -88,18 +73,14 @@ services:
           cpus: '0.5'
           memory: 512M
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5555/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   nginx:
     image: nginx:alpine
     ports:
-      - "80:8000"
+      - "8008:8008"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - .:/app:ro
     depends_on:
       - web
     deploy:
@@ -108,11 +89,6 @@ services:
           cpus: '0.5'
           memory: 512M
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   redis_data:
