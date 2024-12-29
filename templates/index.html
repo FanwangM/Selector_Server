@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Procrustes Analysis Web Server</title>
+    <title>Selector Web Server</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -418,54 +418,107 @@
         <!-- Sidebar -->
         <nav id="sidebar">
             <div class="sidebar-header">
-                <h5 class="sidebar-title">Procrustes Server</h5>
+                <h5 class="sidebar-title">Selector Server</h5>
                 <button type="button" id="sidebarCollapse" class="btn">
                     <i class="bi bi-chevron-left"></i>
                 </button>
             </div>
-
-            <div class="components">
-                <a href="#about" class="nav-link" data-section="about">
-                    <i class="bi bi-book"></i> About Procrustes
-                </a>
-                <a href="#tools" class="nav-link" data-section="tools">
-                    <i class="bi bi-tools"></i> Procrustes Tools
-                </a>
-                <a href="#contact" class="nav-link" data-section="contact">
-                    <i class="bi bi-envelope"></i> Contact
-                </a>
-            </div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a href="#" class="nav-link active" data-section="selection">
+                        <i class="bi bi-grid-3x3-gap me-2"></i>Subset Selection
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-section="diversity">
+                        <i class="bi bi-graph-up me-2"></i>Diversity Calculation
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-section="about">
+                        <i class="bi bi-info-circle me-2"></i>About
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-section="contact">
+                        <i class="bi bi-envelope me-2"></i>Contact
+                    </a>
+                </li>
+            </ul>
         </nav>
 
         <!-- Page Content -->
         <div id="content">
-            <!-- About Section -->
-            <div id="about" class="section" style="display: none;">
-                <h2>About Procrustes Analysis</h2>
-                <div id="about-content">Loading...</div>
-            </div>
-
-            <!-- Tools Section -->
-            <div id="tools" class="section">
-                <h2>Procrustes Analysis Tools</h2>
+            <!-- Selection Section -->
+            <div id="selection" class="section">
+                <h2>Subset Selection</h2>
                 <div class="card">
                     <div class="card-body">
-                        <form id="uploadForm" enctype="multipart/form-data">
+                        <form id="selectionForm" enctype="multipart/form-data">
                             <div class="mb-3">
-                                <label for="algorithm" class="form-label">Select Algorithm</label>
-                                <select class="form-select" id="algorithm" name="algorithm" required>
-                                    <option value="orthogonal">orthogonal</option>
-                                    <option value="rotational">rotational</option>
-                                    <option value="permutation">permutation</option>
-                                    <!-- <option value="generalized">generalized</option> -->
-                                    <option value="generic">generic</option>
-                                    <!-- <option value="kopt_heuristic_single">kopt_heuristic_single</option> -->
-                                    <!-- <option value="kopt_heuristic_double">kopt_heuristic_double</option> -->
-                                    <option value="orthogonal_2sided">orthogonal_2sided</option>
-                                    <option value="permutation_2sided">permutation_2sided</option>
-                                    <option value="softassign">softassign</option>
-                                    <option value="symmetric">symmetric</option>
+                                <label for="file" class="form-label">Upload Feature Matrix</label>
+                                <input type="file" class="form-control" id="file" name="file" accept=".txt,.npz,.xlsx,.xls">
+                                <small class="text-muted">Supported formats: .txt, .npz, .xlsx, .xls (max 32MB)</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="size" class="form-label">Subset Size</label>
+                                <input type="number" class="form-control" id="size" name="size" min="1" step="1" required>
+                                <small class="text-muted">Number of data points to select (integer)</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="distance_metric" class="form-label">Distance Function</label>
+                                <select class="form-select" id="distance_metric" name="distance_metric">
+                                    <option value="euclidean">euclidean</option>
+                                    <option value="cityblock">cityblock</option>
+                                    <option value="cosine">cosine</option>
+                                    <option value="l1">l1</option>
+                                    <option value="l2">l2</option>
+                                    <option value="manhattan">manhattan</option>
+                                    <option value="braycurtis">braycurtis</option>
+                                    <option value="canberra">canberra</option>
+                                    <option value="chebyshev">chebyshev</option>
+                                    <option value="correlation">correlation</option>
+                                    <option value="dice">dice</option>
+                                    <option value="hamming">hamming</option>
+                                    <option value="jaccard">jaccard</option>
+                                    <option value="kulsinski">kulsinski</option>
+                                    <option value="mahalanobis">mahalanobis</option>
+                                    <option value="minkowski">minkowski</option>
+                                    <option value="rogerstanimoto">rogerstanimoto</option>
+                                    <option value="russellrao">russellrao</option>
+                                    <option value="seuclidean">seuclidean</option>
+                                    <option value="sokalmichener">sokalmichener</option>
+                                    <option value="sokalsneath">sokalsneath</option>
+                                    <option value="sqeuclidean">sqeuclidean</option>
+                                    <option value="yule">yule</option>
                                 </select>
+                                <small class="text-muted">Distance metric from scikit-learn's pairwise_distances (optional)</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="algorithm" class="form-label">Selection Method</label>
+                                <select class="form-select" id="algorithm" name="algorithm">
+                                    <optgroup label="Distance-based Methods">
+                                        <option value="MaxMin">MaxMin</option>
+                                        <option value="MaxSum">MaxSum</option>
+                                        <option value="OptiSim">OptiSim</option>
+                                        <option value="DISE">DISE</option>
+                                    </optgroup>
+                                    <optgroup label="Partition-based Methods">
+                                        <option value="GridPartition">Grid Partition</option>
+                                    </optgroup>
+                                    <optgroup label="Similarity-based Methods">
+                                        <option value="NSimilarity">NSimilarity</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            <div class="mb-3" id="nbins_axis_container" style="display: none;">
+                                <label for="nbins_axis" class="form-label">Number of Bins per Axis</label>
+                                <input type="number" class="form-control" id="nbins_axis" name="nbins_axis" min="1" value="5">
+                                <small class="form-text text-muted">Number of bins to partition each axis into</small>
                             </div>
 
                             <div class="mb-3">
@@ -473,66 +526,97 @@
                                 <textarea class="form-control font-monospace" id="parameters" name="parameters" rows="10"></textarea>
                             </div>
 
-                            <div class="mb-3">
-                                <label for="file1" class="form-label">First Matrix (NPZ/Excel/TXT)</label>
-                                <input type="file" class="form-control" id="file1" name="file1" accept=".npz,.xlsx,.xls,.txt" required>
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-play-fill me-2"></i>Run Subset Selection
+                                </button>
                             </div>
-
-                            <div class="mb-3">
-                                <label for="file2" class="form-label">Second Matrix (NPZ/Excel/TXT)</label>
-                                <input type="file" class="form-control" id="file2" name="file2" accept=".npz,.xlsx,.xls,.txt" required>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary">Analyze</button>
                         </form>
-
-                        <div class="loading mt-3">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <span class="ms-2">Processing...</span>
-                        </div>
                     </div>
                 </div>
 
-                <div id="resultSection" class="result-section">
+                <div id="resultSection" class="mt-4" style="display: none;">
                     <div class="card">
                         <div class="card-body">
                             <h5 class="card-title">Results</h5>
-                            <p>Procrustes Error: <span id="error" class="fw-bold"></span></p>
+                            <div id="warnings" class="alert alert-warning" style="display: none;"></div>
+                            <div id="error" class="alert alert-danger" style="display: none;"></div>
 
-                            <div class="mb-3">
-                                <h6>Transformation Matrix:</h6>
-                                <div id="transformationMatrix" class="bg-light p-3 mb-3" style="font-family: monospace;">
+                            <div id="success-content" style="display: none;">
+                                <h4>Selected Indices:</h4>
+                                <pre id="indices"></pre>
+                                <div class="mb-3">
+                                    <label for="download-format" class="form-label">Download Format</label>
+                                    <select class="form-select" id="download-format">
+                                        <option value="txt">TXT</option>
+                                        <option value="npz">NPZ</option>
+                                        <option value="xlsx">Excel</option>
+                                    </select>
                                 </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <h6>Transformed Array:</h6>
-                                <div id="transformedArray" class="bg-light p-3 mb-3" style="font-family: monospace;">
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Download Format</label>
-                                <select class="form-select" id="downloadFormat">
-                                    <option value="npz">NPZ</option>
-                                    <option value="xlsx">Excel</option>
-                                    <option value="txt">TXT</option>
-                                </select>
-                            </div>
-
-                            <div class="btn-group">
-                                <button class="btn btn-success" onclick="downloadResult('transformation')">
-                                    Download Transformation Matrix
-                                </button>
-                                <button class="btn btn-info" onclick="downloadResult('new_array')">
-                                    Download Transformed Array
-                                </button>
+                                <button class="btn btn-primary" onclick="downloadIndices()">Download Results</button>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Diversity Section -->
+            <div id="diversity" class="section" style="display: none;">
+                <h2>Diversity Calculation</h2>
+                <div class="container mt-4">
+                    <form id="diversity-form" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="feature_subset" class="form-label">Upload Feature Subset</label>
+                            <input type="file" class="form-control" id="feature_subset" name="feature_subset" accept=".csv,.txt,.xlsx,.xls,.npz">
+                            <small class="text-muted">Upload your feature subset matrix (supported formats: CSV, TXT, XLSX, NPZ)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="features" class="form-label">Upload Features (Optional)</label>
+                            <input type="file" class="form-control" id="features" name="features" accept=".csv,.txt,.xlsx,.xls,.npz">
+                            <small class="text-muted">Upload your features matrix. It's only for hypersphere overlaping algorithm.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="div_type" class="form-label">Diversity Type</label>
+                            <select class="form-select" id="div_type" name="div_type">
+                                <option value="logdet">Log Determinant</option>
+                                <option value="shannon_entropy">Shannon Entropy</option>
+                                <option value="explicit_diversity_index">Explicit Diversity Index</option>
+                                <option value="wdud">WDUD</option>
+                                <option value="hypersphere_overlap">Hypersphere Overlap</option>
+                                <option value="gini_coefficient">Gini Coefficient</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="div_parameters" class="form-label">Additional Parameters (JSON format)</label>
+                            <textarea class="form-control font-monospace" id="div_parameters" name="div_parameters" rows="5"></textarea>
+                            <small class="text-muted">Specify normalize, truncation, and cs parameters in JSON format</small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">Calculate Diversity</button>
+                        </div>
+
+                        <!-- Results section -->
+                        <div id="diversity-results" class="mt-4" style="display: none;">
+                            <h3>Results</h3>
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">Diversity Score</h5>
+                                    <p class="card-text" id="diversity-score"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- About Section -->
+            <div id="about" class="section" style="display: none;">
+                <h2>About Selector</h2>
+                <div id="about-content">Loading...</div>
             </div>
 
             <!-- Contact Section -->
@@ -578,7 +662,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let resultData = null;
+        let currentIndices = null;  // Store the current indices globally
 
         // Sidebar toggle functionality
         const sidebar = document.getElementById('sidebar');
@@ -627,115 +711,176 @@
             });
         });
 
-        // Show tools section by default
+        // Show selection section by default
         document.addEventListener('DOMContentLoaded', function() {
-            showSection('tools');
+            showSection('selection');
             loadMarkdownContent();
             checkServerStatus();
             setInterval(checkServerStatus, 30000);
         });
 
-        function formatMatrix(matrix) {
-            // Return the matrix as is, without formatting
-            return matrix;
-        }
-
         async function updateDefaultParams() {
             const algorithm = document.getElementById('algorithm').value;
+            const parametersTextarea = document.getElementById('parameters');
+            const nbinsInput = document.getElementById('nbins_axis');
+
             try {
                 const response = await fetch(`/get_default_params/${algorithm}`);
                 const data = await response.json();
-                document.getElementById('parameters').value = JSON.stringify(data, null, 2);
+
+                if (response.ok) {
+                    // Get base parameters
+                    const params = data;
+
+                    // Add nbins_axis for GridPartition
+                    if (algorithm === 'GridPartition') {
+                        params.nbins_axis = parseInt(nbinsInput.value) || 5;
+                    }
+
+                    // Format the parameters nicely
+                    parametersTextarea.value = JSON.stringify(params, null, 2);
+                } else {
+                    console.error('Error getting default parameters:', data.error);
+                    parametersTextarea.value = '{}';
+                }
             } catch (error) {
-                console.error('Error fetching default parameters:', error);
+                console.error('Error:', error);
+                parametersTextarea.value = '{}';
             }
         }
 
-        document.getElementById('algorithm').addEventListener('change', updateDefaultParams);
-        updateDefaultParams();
+        // Update parameters when algorithm changes
+        document.getElementById('algorithm').addEventListener('change', function() {
+            const algorithm = this.value;
+            const nbinsContainer = document.getElementById('nbins_axis_container');
 
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            console.log('Form submitted');
+            // Show/hide nbins_axis input based on algorithm
+            if (algorithm === 'GridPartition') {
+                nbinsContainer.style.display = 'block';
+            } else {
+                nbinsContainer.style.display = 'none';
+            }
 
-            const formData = new FormData(e.target);
-            const loading = document.querySelector('.loading');
-            const resultSection = document.getElementById('resultSection');
+            updateDefaultParams();
+        });
 
-            loading.style.display = 'block';
-            resultSection.style.display = 'none';
-
-            try {
-                console.log('Sending request...');
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                console.log('Response received');
-                const data = await response.json();
-                console.log('Response data:', data);
-
-                if (response.ok) {
-                    resultData = data;
-                    console.log('Setting error:', data.error);
-                    document.getElementById('error').textContent = data.error.toFixed(6);
-
-                    console.log('Setting transformation matrix');
-                    const transformationElem = document.getElementById('transformationMatrix');
-                    transformationElem.textContent = JSON.stringify(data.transformation, null, 2);
-
-                    console.log('Setting transformed array');
-                    const transformedArrayElem = document.getElementById('transformedArray');
-                    transformedArrayElem.textContent = JSON.stringify(data.new_array, null, 2);
-
-                    resultSection.style.display = 'block';
-                } else {
-                    console.error('Error response:', data);
-                    alert(data.error || 'An error occurred');
-                }
-            } catch (error) {
-                console.error('Error in request:', error);
-                alert('An error occurred while processing the request');
-            } finally {
-                loading.style.display = 'none';
+        // Update parameters when nbins_axis changes
+        document.getElementById('nbins_axis').addEventListener('input', function() {
+            if (document.getElementById('algorithm').value === 'GridPartition') {
+                const params = JSON.parse(document.getElementById('parameters').value || '{}');
+                params.nbins_axis = parseInt(this.value) || 5;
+                document.getElementById('parameters').value = JSON.stringify(params, null, 2);
             }
         });
 
-        async function downloadResult(type) {
-            if (!resultData) return;
+        // Update parameters when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDefaultParams();
+            // Also trigger algorithm change to show/hide nbins_axis input
+            const algorithmSelect = document.getElementById('algorithm');
+            algorithmSelect.dispatchEvent(new Event('change'));
+        });
 
-            const format = document.getElementById('downloadFormat').value;
-            const formData = new FormData();
-            formData.append('data', JSON.stringify(
-                type === 'transformation' ? resultData.transformation : resultData.new_array
-            ));
-            formData.append('format', format);
+        async function downloadIndices() {
+            if (!currentIndices) {
+                console.error('No indices available for download');
+                return;
+            }
+
+            const format = document.getElementById('download-format').value;
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
             try {
                 const response = await fetch('/download', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        indices: currentIndices,
+                        format: format,
+                        timestamp: timestamp
+                    })
                 });
 
                 if (response.ok) {
+                    // Create a download link
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `procrustes_${type}.${format}`;
+                    a.download = `selected_indices_${timestamp}.${format}`;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
                     a.remove();
                 } else {
-                    const data = await response.json();
-                    alert(data.error || 'An error occurred during download');
+                    const error = await response.json();
+                    console.error('Download failed:', error);
+                    alert('Failed to download results: ' + (error.error || 'Unknown error'));
                 }
             } catch (error) {
-                alert('An error occurred while downloading the file');
+                console.error('Download error:', error);
+                alert('Error downloading results: ' + error.message);
             }
         }
+
+        document.getElementById('selectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            const resultSection = document.getElementById('resultSection');
+            const warningsDiv = document.getElementById('warnings');
+            const errorDiv = document.getElementById('error');
+            const successContent = document.getElementById('success-content');
+            const indicesDiv = document.getElementById('indices');
+
+            // Validate size is an integer
+            const size = parseInt(formData.get('size'));
+            if (isNaN(size) || size < 1 || size !== parseFloat(formData.get('size'))) {
+                errorDiv.textContent = 'Size must be a positive integer';
+                resultSection.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/upload_selection', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                // Reset display
+                resultSection.style.display = 'block';
+                warningsDiv.style.display = 'none';
+                errorDiv.style.display = 'none';
+                successContent.style.display = 'none';
+
+                if (response.ok && data.success) {
+                    // Store the indices globally
+                    currentIndices = data.indices;
+
+                    // Show warnings if any
+                    if (data.warnings && data.warnings.length > 0) {
+                        warningsDiv.textContent = 'Warnings: ' + data.warnings.join(', ');
+                        warningsDiv.style.display = 'block';
+                    }
+
+                    // Show results
+                    indicesDiv.textContent = JSON.stringify(data.indices, null, 2);
+                    successContent.style.display = 'block';
+                } else {
+                    errorDiv.textContent = data.error || 'Failed to process selection';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                errorDiv.textContent = 'Error processing request: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        });
 
         // Server status check
         async function checkServerStatus() {
@@ -797,6 +942,57 @@
                 console.error('Error loading markdown content:', error);
             }
         }
+
+        document.getElementById('diversity-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const parameters = document.getElementById('div_parameters').value;
+
+            try {
+                // Parse and add JSON parameters
+                const params = JSON.parse(parameters || '{}');
+                formData.set('div_parameters', JSON.stringify(params));
+
+                const response = await fetch('/calculate_diversity', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Show results
+                    document.getElementById('diversity-results').style.display = 'block';
+                    document.getElementById('diversity-score').textContent = result.diversity_score;
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error calculating diversity: ' + error.message);
+            }
+        });
+
+        // Set default parameters when diversity type changes
+        document.getElementById('div_type').addEventListener('change', function() {
+            const defaultParams = {
+                normalize: false,
+                truncation: false,
+                cs: null
+            };
+            document.getElementById('div_parameters').value = JSON.stringify(defaultParams, null, 2);
+        });
+
+        // Initialize default parameters
+        document.addEventListener('DOMContentLoaded', function() {
+            const defaultParams = {
+                normalize: false,
+                truncation: false,
+                cs: null
+            };
+            document.getElementById('div_parameters').value = JSON.stringify(defaultParams, null, 2);
+        });
     </script>
 </body>
 </html>
