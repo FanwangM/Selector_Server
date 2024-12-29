@@ -91,20 +91,6 @@ def load_data(filepath):
     except Exception as e:
         raise ValueError(f"Error loading file {filepath}: {str(e)}")
 
-    # def save_data(data, format_type):
-    #     """Save data in the specified format."""
-    #     temp_dir = tempfile.mkdtemp()
-    #     filename = os.path.join(temp_dir, f"result.{format_type}")
-
-    #     if format_type == "npz":
-    #         np.savez(filename, result=data)
-    #     elif format_type == "txt":
-    #         np.savetxt(filename, data)
-    #     elif format_type in ["xlsx"]:
-    #         pd.DataFrame(data).to_excel(filename, index=False)
-
-    return filename
-
 
 def create_json_response(data, status=200):
     """Create a JSON response using orjson for better numpy array handling"""
@@ -458,7 +444,20 @@ def calculate_diversity():
 
         # Read feature subset
         try:
-            feature_subset = load_data(feature_subset_file)
+            # Save the uploaded file
+            feature_subset_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(feature_subset_file.filename))
+            feature_subset_file.save(feature_subset_path)
+
+            # Read the feature subset file
+            feature_subset = load_data(feature_subset_path)
+            if feature_subset is None:
+                raise ValueError(f"Failed to read feature subset file: {feature_subset_file.filename}")
+
+            # Convert to float array
+            feature_subset = feature_subset.astype(float)
+
+            # Clean up the temporary file
+            os.remove(feature_subset_path)
         except Exception as e:
             return create_json_response({"error": f"Error reading feature subset file: {str(e)}"}, 400)
 
@@ -466,7 +465,20 @@ def calculate_diversity():
         features = None
         if features_file:
             try:
-                features = load_data(features_file)
+                # Save the uploaded file
+                features_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(features_file.filename))
+                features_file.save(features_path)
+
+                # Read the features file
+                features = load_data(features_path)
+                if features is None:
+                    raise ValueError(f"Failed to read features file: {features_file.filename}")
+
+                # Convert to float array
+                features = features.astype(float)
+
+                # Clean up the temporary file
+                os.remove(features_path)
             except Exception as e:
                 return create_json_response({"error": f"Error reading features file: {str(e)}"}, 400)
 

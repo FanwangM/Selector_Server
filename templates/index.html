@@ -566,27 +566,26 @@
                 <div class="container mt-4">
                     <form id="diversity-form" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label for="feature_subset" class="form-label">Feature Subset</label>
-                            <input type="file" class="form-control" id="feature_subset" name="feature_subset" accept=".csv,.xlsx,.xls">
-                            <small class="text-muted">Upload your feature subset matrix</small>
+                            <label for="feature_subset" class="form-label">Upload Feature Subset</label>
+                            <input type="file" class="form-control" id="feature_subset" name="feature_subset" accept=".csv,.txt,.xlsx,.xls,.npz">
+                            <small class="text-muted">Upload your feature subset matrix (supported formats: CSV, TXT, XLSX, NPZ)</small>
                         </div>
 
                         <div class="mb-3">
-                            <label for="features" class="form-label">Features (Optional)</label>
-                            <input type="file" class="form-control" id="features" name="features" accept=".csv,.xlsx,.xls">
-                            <small class="text-muted">Upload your features matrix (optional)</small>
+                            <label for="features" class="form-label">Upload Features (Optional)</label>
+                            <input type="file" class="form-control" id="features" name="features" accept=".csv,.txt,.xlsx,.xls,.npz">
+                            <small class="text-muted">Upload your features matrix. It's only for hypersphere overlaping algorithm.</small>
                         </div>
 
                         <div class="mb-3">
                             <label for="div_type" class="form-label">Diversity Type</label>
                             <select class="form-select" id="div_type" name="div_type">
-                                <option value="logdet">LogDet</option>
+                                <option value="logdet">Log Determinant</option>
                                 <option value="shannon_entropy">Shannon Entropy</option>
                                 <option value="explicit_diversity_index">Explicit Diversity Index</option>
                                 <option value="wdud">WDUD</option>
-                                <option value="hypersphere_overlap_of_subset">Hypersphere Overlap</option>
+                                <option value="hypersphere_overlap">Hypersphere Overlap</option>
                                 <option value="gini_coefficient">Gini Coefficient</option>
-                                <option value="nearest_average_tanimoto">Nearest Average Tanimoto</option>
                             </select>
                         </div>
 
@@ -732,12 +731,12 @@
                 if (response.ok) {
                     // Get base parameters
                     const params = data;
-                    
+
                     // Add nbins_axis for GridPartition
                     if (algorithm === 'GridPartition') {
                         params.nbins_axis = parseInt(nbinsInput.value) || 5;
                     }
-                    
+
                     // Format the parameters nicely
                     parametersTextarea.value = JSON.stringify(params, null, 2);
                 } else {
@@ -754,14 +753,14 @@
         document.getElementById('algorithm').addEventListener('change', function() {
             const algorithm = this.value;
             const nbinsContainer = document.getElementById('nbins_axis_container');
-            
+
             // Show/hide nbins_axis input based on algorithm
             if (algorithm === 'GridPartition') {
                 nbinsContainer.style.display = 'block';
             } else {
                 nbinsContainer.style.display = 'none';
             }
-            
+
             updateDefaultParams();
         });
 
@@ -946,22 +945,22 @@
 
         document.getElementById('diversity-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(this);
             const parameters = document.getElementById('div_parameters').value;
-            
+
             try {
                 // Parse and add JSON parameters
                 const params = JSON.parse(parameters || '{}');
                 formData.set('div_parameters', JSON.stringify(params));
-                
+
                 const response = await fetch('/calculate_diversity', {
                     method: 'POST',
                     body: formData
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (response.ok) {
                     // Show results
                     document.getElementById('diversity-results').style.display = 'block';
