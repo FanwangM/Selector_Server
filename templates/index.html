@@ -515,6 +515,12 @@
                                 </select>
                             </div>
 
+                            <div class="mb-3" id="nbins_axis_container" style="display: none;">
+                                <label for="nbins_axis" class="form-label">Number of Bins per Axis</label>
+                                <input type="number" class="form-control" id="nbins_axis" name="nbins_axis" min="1" value="5">
+                                <small class="form-text text-muted">Number of bins to partition each axis into</small>
+                            </div>
+
                             <div class="mb-3">
                                 <label for="parameters" class="form-label">Additional Parameters (JSON format)</label>
                                 <textarea class="form-control font-monospace" id="parameters" name="parameters" rows="10"></textarea>
@@ -669,14 +675,23 @@
         async function updateDefaultParams() {
             const algorithm = document.getElementById('algorithm').value;
             const parametersTextarea = document.getElementById('parameters');
+            const nbinsInput = document.getElementById('nbins_axis');
 
             try {
                 const response = await fetch(`/get_default_params/${algorithm}`);
                 const data = await response.json();
 
                 if (response.ok) {
+                    // Get base parameters
+                    const params = data;
+                    
+                    // Add nbins_axis for GridPartition
+                    if (algorithm === 'GridPartition') {
+                        params.nbins_axis = parseInt(nbinsInput.value) || 5;
+                    }
+                    
                     // Format the parameters nicely
-                    parametersTextarea.value = JSON.stringify(data, null, 2);
+                    parametersTextarea.value = JSON.stringify(params, null, 2);
                 } else {
                     console.error('Error getting default parameters:', data.error);
                     parametersTextarea.value = '{}';
@@ -688,10 +703,36 @@
         }
 
         // Update parameters when algorithm changes
-        document.getElementById('algorithm').addEventListener('change', updateDefaultParams);
+        document.getElementById('algorithm').addEventListener('change', function() {
+            const algorithm = this.value;
+            const nbinsContainer = document.getElementById('nbins_axis_container');
+            
+            // Show/hide nbins_axis input based on algorithm
+            if (algorithm === 'GridPartition') {
+                nbinsContainer.style.display = 'block';
+            } else {
+                nbinsContainer.style.display = 'none';
+            }
+            
+            updateDefaultParams();
+        });
+
+        // Update parameters when nbins_axis changes
+        document.getElementById('nbins_axis').addEventListener('input', function() {
+            if (document.getElementById('algorithm').value === 'GridPartition') {
+                const params = JSON.parse(document.getElementById('parameters').value || '{}');
+                params.nbins_axis = parseInt(this.value) || 5;
+                document.getElementById('parameters').value = JSON.stringify(params, null, 2);
+            }
+        });
 
         // Update parameters when page loads
-        document.addEventListener('DOMContentLoaded', updateDefaultParams);
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDefaultParams();
+            // Also trigger algorithm change to show/hide nbins_axis input
+            const algorithmSelect = document.getElementById('algorithm');
+            algorithmSelect.dispatchEvent(new Event('change'));
+        });
 
         async function downloadIndices() {
             if (!currentIndices) {

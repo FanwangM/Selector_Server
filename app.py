@@ -267,6 +267,19 @@ def process_selection(arr, algorithm, parameters, dist_metric):
             # For non-distance-based methods, use the original float array
             arr_dist = arr_float
 
+        # Handle special case for GridPartition
+        if algorithm == "GridPartition":
+            # Ensure nbins_axis is provided and is an integer
+            nbins_axis = parameters.get('nbins_axis')
+            if nbins_axis is None:
+                raise ValueError("nbins_axis must be specified for GridPartition")
+            try:
+                parameters['nbins_axis'] = int(nbins_axis)
+                if parameters['nbins_axis'] < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ValueError("nbins_axis must be a positive integer")
+
         # Initialize and run the algorithm
         try:
             collector = algorithm_class(**parameters)
