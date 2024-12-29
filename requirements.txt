@@ -1,6 +1,6 @@
 flask>=3.0.0
 qc-procrustes>=1.1.1
-qc-selector>=0.0.2
+qc-selector>=0.0.3
 numpy>=2.0.0
 pandas>=2.1.4
 openpyxl>=3.0.9

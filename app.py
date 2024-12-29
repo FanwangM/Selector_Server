@@ -225,6 +225,10 @@ def process_selection(arr, algorithm, parameters, dist_metric):
     try:
         # Get the algorithm class
         algorithm_class = SELECTION_ALGORITHM_MAP.get(algorithm)
+        print(f"Debug - Algorithm name: {algorithm}")
+        print(f"Debug - Available algorithms: {list(SELECTION_ALGORITHM_MAP.keys())}")
+        print(f"Debug - Algorithm class: {algorithm_class}")
+
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
 
@@ -286,6 +290,8 @@ def process_selection(arr, algorithm, parameters, dist_metric):
             result["indices"] = indices_list
 
         except Exception as e:
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             raise ValueError(f"Error executing algorithm: {str(e)}")
 
     except Warning as w:
