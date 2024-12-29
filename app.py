@@ -225,9 +225,6 @@ def process_selection(arr, algorithm, parameters, dist_metric):
     try:
         # Get the algorithm class
         algorithm_class = SELECTION_ALGORITHM_MAP.get(algorithm)
-        print(f"Debug - Algorithm name: {algorithm}")
-        print(f"Debug - Available algorithms: {list(SELECTION_ALGORITHM_MAP.keys())}")
-        print(f"Debug - Algorithm class: {algorithm_class}")
 
         if algorithm_class is None:
             raise ValueError(f"Unknown algorithm: {algorithm}")
